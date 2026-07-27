@@ -211,11 +211,10 @@ activated cells is compared to `completionGoal`: meet or beat it and it's a
 win, fall short and it's a loss. Reset clears the board and restores the
 budget so the level replays deterministically.
 
-The shipped level's `energyBudget: 4` / `completionGoal: 0.15` were chosen by
-actually computing the level's connected components per building type and
-checking that its four largest clusters clear the goal — see the "completion
-goal is reachable" test in `test.html`, which re-derives this from the level
-file itself so the two can't silently drift apart.
+The shipped level's `energyBudget` and `completionGoal` are re-verified by
+the "completion goal is reachable" test in `test.html` against the level
+file itself, so the two can't silently drift apart — see Milestone 3 below
+for why that test looks different than a simple cluster-size sum now.
 
 ### Drain — the first tile that costs you progress
 
@@ -256,18 +255,75 @@ start from *every* currently-lit cell within a cluster at once. Starting
 local means finding out whether "losing progress" is fun at all before
 building that.
 
-Because it removes cells from the activated count, drain also breaks the
-"sum the top-N disjoint clusters" model the completion-goal-reachability test
-uses to check a level is winnable — that model assumes every tap only adds,
-and now doesn't know that a cell adjacent to a drain can never actually be
-banked. The one drain on the shipped level (row 9, column 9) touches a lone
-crystal and one cell of a 7-cell cluster; both are permanently undrainable in
-practice, shrinking that cluster's *real* contribution from 7 to 6. The level
-stays winnable regardless — raw top 4 clusters are 8+7+7+6 = 28 of 140 (20%);
-corrected for the drain, 8+7+6+6 = 27 of 140 (19%), still well clear of the
-15% goal — but this was checked by hand, not by the test, which still
-reports the raw, slightly optimistic number. That's the first thing a proper
-solvability check needs to account for.
+Because it removes cells from the activated count, a drain permanently
+undercuts whatever cluster it borders — the one on the shipped level (row 9,
+column 9) touches a lone crystal and one cell of what was, before signal
+attenuation, the board's second-biggest cluster; neither can ever actually be
+banked while it's tapped anywhere nearby. Once Milestone 3 replaced "flood
+the whole connected cluster" with signal-limited reach, this stopped being a
+distinct problem to solve — see below.
+
+## Milestone 3 — Signal attenuation and the power plant
+
+Every crystal type up to this point spread activation for free: tap one cell
+and the whole connected cluster lights up, no matter how big. That made
+*which* cluster you tapped the only decision — never *how much* a tap was
+worth. Signal attenuation makes activation a resource that runs out as it
+travels, so reach becomes something the board design controls directly.
+
+**The rule:** a tap hands the tapped cell one unit of signal. Every cell that
+activates passes along whatever signal it received, plus its own boost (0 for
+ordinary crystals) minus the level's `attenuation` (a number in the level
+file, defaulting to 1 if omitted). Once that reaches zero, the signal is
+spent and the cascade stops spreading from there — the cell itself still
+activates (it got a positive signal to exist at all), it just can't hand
+anything further on. With the default attenuation of 1, a plain tap's signal
+is exactly enough to activate the tapped cell and nothing else: 1 (tap) − 1
+(attenuation) = 0 for every neighbour. Every crystal type built so far —
+plain, red, green — behaves this way by default. This is the headline
+consequence: **without something that adds signal back, no tap spreads
+beyond the single cell you tapped.**
+
+**Power plant** is that something: a new building, same shape as plain
+crystal (activates every orthogonal crystal-family neighbour, participates in
+`CRYSTAL_TYPES` the same as red and green do), except it adds 5 to the signal
+the moment it activates, before that hop's attenuation is subtracted. Tap a
+power plant directly and its neighbours receive 1 (tap) + 5 (boost) − 1
+(attenuation) = 5 — enough to travel up to 5 further hops (5, 4, 3, 2, 1, then
+0) before dying out, activating everything within that reach, colors mixed
+freely. A second power plant encountered along the way re-boosts whatever
+signal is left when it activates, extending the chain further still.
+
+This is a fixed property on the building (`boost: 5` in `buildings.js`), not
+something a level can retune — deliberately asymmetric with `attenuation`,
+which lives in the level file. Attenuation is a property of the *level's
+physics* (how costly is a hop, here); boost is a property of *what a specific
+tile does*, no different in kind from a crystal's color or axis, which are
+also fixed in code. If a level ever needs a different boost, that's a new
+building type, the same way red and green are new types rather than a
+parameter on crystal.
+
+**Consequence for level design:** a crystal cluster is no longer inherently
+valuable — only a cluster *reachable from a power plant* is. The shipped
+level places one power plant (row 1, column 2) with a single-tap reach of 16
+cells; every other tap is worth exactly 1 unless routed through it. Finding
+and using the power plant stopped being optional the moment this landed — it
+went from "one more tile" to "the only tile that matters," which is exactly
+the kind of asymmetry a level can now be designed around.
+
+This also changed what "is this level winnable" means to check. The old test
+summed the sizes of the N biggest *connected components* and compared that to
+`completionGoal`, which implicitly assumed every tap floods its whole
+cluster — no longer true. The rewritten test is a *constructive* check
+instead of an optimality proof: it simulates one concrete sequence a player
+could actually make (tap the power plant, then tap one more untouched
+crystal) using the real, signal-aware `computeCascade`, and confirms that
+alone clears the goal. It proves the level *can* be won, not that this is the
+best way to win it — good enough for now, and honest about the difference.
+`energyBudget: 4` / `completionGoal: 0.12` were chosen the same way: the
+power plant alone reaches 16 of 140 cells (11%); one more ordinary tap
+reaches 17 (12.1%), just clearing the goal with two energy still spare for a
+wrong guess or two.
 
 ## Decisions so far
 
@@ -280,6 +336,8 @@ solvability check needs to account for.
 | Sandbox before energy | Get the cascade feeling right before adding pressure |
 | Energy costs 1 per tap, not per cell lit | Rewards finding big connected clusters instead of counting cells |
 | Completion goal is a fraction of the whole board | Ties level design directly to crystal density instead of a second hidden number |
+| Signal attenuates per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
+| Boost is a fixed per-building constant; attenuation lives in the level file | Boost is what a tile *is* (fixed in code, like color or axis); attenuation is level physics (varies per level, like energy budget) |
 
 ## Open questions
 

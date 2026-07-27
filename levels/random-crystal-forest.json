@@ -5,17 +5,18 @@
     "height": 14
   },
   "energyBudget": 4,
-  "completionGoal": 0.15,
+  "completionGoal": 0.12,
   "legend": {
     ".": "desert",
     "C": "crystal",
     "R": "redCrystal",
     "G": "greenCrystal",
-    "D": "drain"
+    "D": "drain",
+    "P": "powerPlant"
   },
   "grid": [
     "..C..CC..C",
-    "CC.CCC.CCC",
+    "CCPCCC.CCC",
     "C.C.C.GGGG",
     "C.CC.C..C.",
     "CC....CC..",

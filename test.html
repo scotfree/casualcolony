@@ -75,7 +75,7 @@ function build(rows, extra = {}) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
-    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal", "D": "drain" },
+    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal", "D": "drain", "P": "powerPlant" },
     grid: rows,
     energyBudget: 99,
     completionGoal: 1,
@@ -91,13 +91,19 @@ function litSet(world, start) {
 }
 
 // --- Cascade ----------------------------------------------------------------
+//
+// Most of these tests are about *connectivity* (does adjacency, axis, or
+// type gate propagation), not about signal decay itself — so they run with
+// attenuation: 0, which removes decay entirely and restores the old
+// "unlimited flood" behaviour. Signal/attenuation/boost get their own
+// section below, with the default attenuation of 1 back in effect.
 
 test("cascade lights the whole connected group", () => {
   const world = build([
     "CC.",
     "C..",
     "...",
-  ]);
+  ], { attenuation: 0 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "0,1", "1,0"], "group");
 });
 
@@ -105,14 +111,14 @@ test("cascade does not cross a diagonal", () => {
   const world = build([
     "C.",
     ".C",
-  ]);
+  ], { attenuation: 0 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "diagonal must not connect");
 });
 
 test("cascade stops at desert", () => {
   const world = build([
     "C.C",
-  ]);
+  ], { attenuation: 0 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "desert blocks");
 });
 
@@ -133,14 +139,15 @@ test("tapping an already-scheduled cell does nothing", () => {
 });
 
 test("cascade skips cells already lit by an earlier tap", () => {
-  const world = build(["CCC"]);
+  const world = build(["CCC"], { attenuation: 0 });
   cellAt(world, 1, 0).activateAt = 0;
-  // The middle cell is already lit, so it blocks the walk to the far end.
+  // The middle cell is already lit, so it blocks the walk to the far end,
+  // even with unlimited signal.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lit cells block");
 });
 
 test("depth increases with distance from the tap", () => {
-  const world = build(["CCCC"]);
+  const world = build(["CCCC"], { attenuation: 0 });
   const depths = computeCascade(world, cellAt(world, 0, 0)).map((step) => step.depth);
   assertEqual(depths, [0, 1, 2, 3], "ripple depth");
 });
@@ -152,7 +159,7 @@ test("depth is shortest-path, not traversal order", () => {
     "CCC",
     "C.C",
     "CCC",
-  ]);
+  ], { attenuation: 0 });
   const cascade = computeCascade(world, cellAt(world, 1, 0));
   const opposite = cascade.find(({ cell }) => cell.x === 1 && cell.y === 2);
   assertEqual(opposite.depth, 4, "shortest path around the ring");
@@ -162,7 +169,7 @@ test("every cell appears at most once", () => {
   const world = build([
     "CCC",
     "CCC",
-  ]);
+  ], { attenuation: 0 });
   const cascade = computeCascade(world, cellAt(world, 0, 0));
   const unique = new Set(cascade.map(({ cell }) => cell));
   assertEqual(cascade.length, unique.size, "no duplicates");
@@ -174,7 +181,7 @@ test("red crystal only propagates north/south", () => {
     "RRR",
     ".R.",
     "RRR",
-  ]);
+  ], { attenuation: 0 });
   // The middle column connects vertically; the top and bottom rows don't
   // connect to each other horizontally, since red ignores east/west.
   assertEqual(litSet(world, cellAt(world, 1, 0)), ["1,0", "1,1", "1,2"], "vertical chain only");
@@ -185,12 +192,12 @@ test("green crystal only propagates east/west", () => {
     "R.G",
     "GGG",
     "R.G",
-  ]);
+  ], { attenuation: 0 });
   assertEqual(litSet(world, cellAt(world, 0, 1)), ["0,1", "1,1", "2,1"], "horizontal chain only");
 });
 
 test("red doesn't reach a horizontally-adjacent neighbour — wrong axis, not wrong color", () => {
-  const world = build(["RG"]);
+  const world = build(["RG"], { attenuation: 0 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "red only checks north/south");
 });
 
@@ -199,7 +206,7 @@ test("plain crystal activates adjacent red and green crystals regardless of colo
     ".R.",
     "GCG",
     ".R.",
-  ]);
+  ], { attenuation: 0 });
   assertEqual(
     litSet(world, cellAt(world, 1, 1)),
     ["0,1", "1,0", "1,1", "1,2", "2,1"],
@@ -211,10 +218,74 @@ test("red crystal activates a green crystal directly north/south of it", () => {
   const world = build([
     "R",
     "G",
-  ]);
+  ], { attenuation: 0 });
   // Reachability follows the *source's* axis (red: vertical), not whether
   // the target's own preferred axis would agree.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "0,1"], "red's vertical axis reaches green");
+});
+
+// --- Signal attenuation and power plants -------------------------------------
+// Default attenuation (1) back in effect here — this is what these tests
+// exist to check.
+
+test("a default tap only activates the tile clicked", () => {
+  // Signal starts at 1, minus attenuation 1 leaves 0 for every neighbour —
+  // exactly the headline behaviour this mechanic is for.
+  const world = build(["CCC"]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "signal dies after the first cell");
+});
+
+test("higher attenuation still can't go negative-reach", () => {
+  const world = build(["CC"], { attenuation: 5 });
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "same result, just more spent");
+});
+
+test("zero attenuation floods forever, same as the old behaviour", () => {
+  const world = build(["CCCC"], { attenuation: 0 });
+  assertEqual(
+    litSet(world, cellAt(world, 0, 0)),
+    ["0,0", "1,0", "2,0", "3,0"],
+    "signal never runs out"
+  );
+});
+
+test("a power plant's boost reaches past a normal crystal's dead end", () => {
+  const world = build(["PCC"]);
+  // Tap the plant: signal 1 + boost 5 - attenuation 1 = 5 handed to the
+  // first crystal, which then passes 5 - 1 = 4 to the second.
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0", "2,0"], "boost carries the chain");
+});
+
+test("signal fades by exactly one cell's worth per hop past a plant", () => {
+  const world = build(["PCCCCCC"]);
+  // 1 (tap) + 5 (boost) = 6, then -1 per hop: 6,5,4,3,2,1,0 across 7 cells —
+  // the 7th receives 0 and is never reached.
+  assertEqual(
+    litSet(world, cellAt(world, 0, 0)),
+    ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0"],
+    "reaches exactly as far as the arithmetic allows"
+  );
+});
+
+test("a second power plant re-boosts an already-fading signal", () => {
+  const world = build(["PCCCPCCC"]);
+  // First plant: 1+5-1=5 into the C's (5,4,3,2 across 4 cells), dying before
+  // reaching the second plant... unless it's placed to receive exactly the
+  // signal needed. Here the second P sits at index 4, receiving signal 5-1-1-1=2
+  // (three hops from the first plant), which is >0, so it re-boosts: 2+5-1=6
+  // onward, reaching all 3 remaining C's (6,5,4).
+  assertEqual(
+    litSet(world, cellAt(world, 0, 0)),
+    ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0"],
+    "whole chain lights thanks to the relay"
+  );
+});
+
+test("tapping a power plant directly still costs exactly one energy's worth of signal", () => {
+  // Without any neighbours to spend it on, a plant tapped alone just lights
+  // itself — same as any other lone crystal.
+  const world = build(["P"]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lone plant");
 });
 
 // --- Drain --------------------------------------------------------------
@@ -420,64 +491,56 @@ test("parses valid energyBudget and completionGoal", () => {
 
 const summary = document.getElementById("summary");
 
-// Connected components across every activatable cell (crystal, red, green —
-// anything with a propagate rule), each following its own propagate. Crystal
-// and its color variants now activate each other across types, so this is
-// the only accurate way to find real cluster sizes; a per-type walk would
-// undercount. Pure: doesn't touch activateAt.
-function findComponents(world) {
-  const seen = new Set();
-  const components = [];
-  for (const cell of world.cells) {
-    if (buildingFor(cell).inert || seen.has(cell)) continue;
-    const component = [cell];
-    const stack = [cell];
-    seen.add(cell);
-    while (stack.length > 0) {
-      const current = stack.pop();
-      const building = buildingFor(current);
-      if (!building.propagate) continue;
-      for (const neighbour of building.propagate(world, current)) {
-        if (seen.has(neighbour)) continue;
-        seen.add(neighbour);
-        stack.push(neighbour);
-        component.push(neighbour);
-      }
-    }
-    components.push(component);
-  }
-  return components;
-}
-
 fetch("./levels/random-crystal-forest.json")
   .then((response) => response.json())
   .then((data) => {
     const world = parseLevel(data);
     const crystals = world.cells.filter((c) => c.type === "crystal");
-    const components = findComponents(world);
-    const activatable = components.reduce((sum, c) => sum + c.length, 0);
-    const biggest = Math.max(...components.map((c) => c.length));
 
     test("shipped level: density is near half", () => {
       const density = crystals.length / world.cells.length;
       assert(density > 0.35 && density < 0.6, `density was ${density.toFixed(2)}`);
     });
 
-    test("shipped level: no cluster dominates the board", () => {
-      // Checked against every activatable cell, not just plain crystals —
-      // clusters now merge across colors, so that's the real denominator.
-      const share = biggest / activatable;
-      assert(share < 0.35, `biggest cluster was ${biggest} of ${activatable} activatable cells`);
+    test("shipped level: no single tap dominates the board", () => {
+      // Real reach now depends on signal, not raw connectivity — computeCascade
+      // is pure, so trying every cell against the same untouched world is safe.
+      let biggest = 0;
+      for (const cell of world.cells) {
+        if (buildingFor(cell).inert) continue;
+        biggest = Math.max(biggest, computeCascade(world, cell).length);
+      }
+      const share = biggest / world.cells.length;
+      assert(share < 0.35, `biggest single-tap reach was ${biggest} of ${world.cells.length} cells`);
     });
 
     test("shipped level: completion goal is reachable within the energy budget", () => {
-      const sizes = components.map((c) => c.length).sort((a, b) => b - a);
-      const reachable = sizes.slice(0, world.energyBudget).reduce((sum, n) => sum + n, 0);
-      const fraction = reachable / world.cells.length;
+      // A constructive check, not an optimality proof: this is one sequence
+      // of taps a player could make (the power plant, then any one more
+      // crystal), simulated on a fresh world so it can't disturb the other
+      // tests sharing `world` above. It only shows the level *can* be won,
+      // not the best way to.
+      const sim = parseLevel(data);
+      let energy = sim.energyBudget;
+      let activated = 0;
+
+      function tap(x, y) {
+        if (energy <= 0) return;
+        const cascade = computeCascade(sim, cellAt(sim, x, y));
+        if (cascade.length === 0) return;
+        for (const { cell } of cascade) cell.activateAt = 0;
+        energy -= 1;
+        activated += cascade.length;
+      }
+
+      tap(2, 1); // the power plant
+      tap(9, 0); // one more crystal, well outside the plant's reach
+
+      const fraction = activated / sim.cells.length;
       assert(
-        fraction >= world.completionGoal,
-        `best ${world.energyBudget} taps reach ${(fraction * 100).toFixed(1)}%, ` +
-        `need ${(world.completionGoal * 100).toFixed(1)}%`
+        fraction >= sim.completionGoal,
+        `power plant + one more tap reaches ${(fraction * 100).toFixed(1)}%, ` +
+        `need ${(sim.completionGoal * 100).toFixed(1)}%`
       );
     });
   })

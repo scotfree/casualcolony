@@ -15,7 +15,7 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid, energyBudget, completionGoal } = data;
+  const { name, size, legend, grid, energyBudget, completionGoal, attenuation } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -76,6 +76,13 @@ export function parseLevel(data) {
   if (typeof completionGoal !== "number" || completionGoal <= 0 || completionGoal > 1) {
     throw new Error("Level needs completionGoal between 0 (exclusive) and 1 (inclusive)");
   }
+  // Optional: how much signal a hop costs. Unlike energyBudget/completionGoal
+  // there's no reason every level should have to choose one, so it defaults
+  // rather than being required.
+  const resolvedAttenuation = attenuation === undefined ? 1 : attenuation;
+  if (typeof resolvedAttenuation !== "number" || resolvedAttenuation < 0) {
+    throw new Error("Level's attenuation must be a non-negative number");
+  }
 
   return {
     name: name || "Untitled",
@@ -84,6 +91,7 @@ export function parseLevel(data) {
     cells,
     energyBudget,
     completionGoal,
+    attenuation: resolvedAttenuation,
     // Mutable: energy spent tapping cells. Reset to energyBudget to replay.
     energy: energyBudget,
   };

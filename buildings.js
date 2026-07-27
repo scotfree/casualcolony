@@ -11,13 +11,18 @@
 // deactivates when tapped. It's the inverse of propagate — a tap here
 // undoes neighbours' activation instead of spreading its own. Omit it for
 // buildings that don't drain.
+//
+// boost is how much this building adds to the signal when it activates,
+// before that signal attenuates on its way to the next cell. Omit it (or
+// leave it 0) for buildings that don't amplify — see cascade.js.
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
-// Crystal, red crystal and green crystal all activate each other — only the
-// *axis* differs per color, not who counts as a valid neighbour. A plain
-// crystal next to a red one lights it just like it would another crystal.
-const CRYSTAL_TYPES = new Set(["crystal", "redCrystal", "greenCrystal"]);
+// Crystal, red crystal, green crystal and the power plant all activate each
+// other — only the *axis* differs per color, not who counts as a valid
+// neighbour. A plain crystal next to a red one lights it just like it would
+// another crystal.
+const CRYSTAL_TYPES = new Set(["crystal", "redCrystal", "greenCrystal", "powerPlant"]);
 
 export const BUILDINGS = {
   desert: {
@@ -75,6 +80,25 @@ export const BUILDINGS = {
     // Same as crystal, but only floods along the east/west axis.
     propagate(world, cell) {
       return horizontalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
+    },
+  },
+
+  powerPlant: {
+    id: "powerPlant",
+    name: "Power Plant",
+    inert: false,
+    fill: "#2c2617",
+    stroke: "#473d1f",
+    dormant: "#6b5a2f",
+    lit: "#fbbf24",
+    glow: "#f59e0b",
+    // Added to the signal when this cell activates, before the next hop's
+    // attenuation is subtracted. See cascade.js.
+    boost: 5,
+
+    // Same reach as plain crystal — every orthogonal crystal-family neighbour.
+    propagate(world, cell) {
+      return orthogonalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
     },
   },
 

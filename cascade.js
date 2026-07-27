@@ -2,7 +2,13 @@
 //
 // A tap activates a building, which activates others, which activate others
 // again. That is a breadth-first walk from the tapped cell, following each
-// building's propagate rule.
+// building's propagate rule — but it isn't unlimited. A tap hands the tapped
+// cell one unit of signal; each cell that activates passes along whatever
+// signal it received, plus its own boost (0 for most buildings, +5 for a
+// power plant), minus this level's attenuation (1 by default). Once that
+// hits zero, the signal is spent and the cascade stops spreading from there
+// — a lone crystal only ever lights itself, and it takes a power plant
+// somewhere in the chain to reach any further.
 //
 // The BFS *depth* is the useful part: cells at depth 0 light immediately,
 // depth 1 a moment later, and so on. Playing back depth by depth is exactly a
@@ -15,6 +21,10 @@
 
 import { buildingFor } from "./buildings.js";
 
+// What a tap hands the tapped cell. With the default attenuation of 1, this
+// is exactly enough to activate that one cell and nothing more.
+const TAP_SIGNAL = 1;
+
 // Returns [{ cell, depth }] in breadth-first order, or [] if this cell can't
 // start a cascade. Pure: it reads the world but changes nothing.
 export function computeCascade(world, start) {
@@ -24,23 +34,25 @@ export function computeCascade(world, start) {
 
   const result = [];
   const seen = new Set([start]);
-  let frontier = [start];
+  let frontier = [{ cell: start, signal: TAP_SIGNAL }];
   let depth = 0;
 
   while (frontier.length > 0) {
-    for (const cell of frontier) {
+    for (const { cell } of frontier) {
       result.push({ cell, depth });
     }
 
     const next = [];
-    for (const cell of frontier) {
+    for (const { cell, signal } of frontier) {
       const building = buildingFor(cell);
       if (!building.propagate) continue;
+      const outgoing = signal + (building.boost || 0) - world.attenuation;
+      if (outgoing <= 0) continue; // signal spent here; nothing passes onward
       for (const neighbour of building.propagate(world, cell)) {
         if (seen.has(neighbour)) continue;
         if (neighbour.activateAt !== null) continue;
         seen.add(neighbour);
-        next.push(neighbour);
+        next.push({ cell: neighbour, signal: outgoing });
       }
     }
 

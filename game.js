@@ -6,7 +6,7 @@ import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const LEVEL_URL = "./levels/random-crystal-forest.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
