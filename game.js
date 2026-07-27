@@ -103,6 +103,15 @@ canvas.addEventListener("pointerdown", (event) => {
   const cell = cellFromPoint(event.clientX, event.clientY);
   if (!cell) return;
 
+  const building = buildingFor(cell);
+  if (building.drain) {
+    const drained = building.drain(world, cell);
+    if (drained.length === 0) return; // nothing to drain, so no energy spent
+    for (const target of drained) target.activateAt = null;
+    world.energy -= 1;
+    return;
+  }
+
   const cascade = computeCascade(world, cell);
   if (cascade.length === 0) return; // nothing activated, so no energy spent
 

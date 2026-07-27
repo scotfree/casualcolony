@@ -10,7 +10,8 @@
     ".": "desert",
     "C": "crystal",
     "R": "redCrystal",
-    "G": "greenCrystal"
+    "G": "greenCrystal",
+    "D": "drain"
   },
   "grid": [
     "..C..CC..C",

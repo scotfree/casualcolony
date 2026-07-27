@@ -6,6 +6,11 @@
 //
 // propagate(world, cell) returns the cells this building activates when it
 // becomes active. Omit it for buildings that don't spread.
+//
+// drain(world, cell) returns the already-activated cells this building
+// deactivates when tapped. It's the inverse of propagate — a tap here
+// undoes neighbours' activation instead of spreading its own. Omit it for
+// buildings that don't drain.
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
@@ -64,6 +69,20 @@ export const BUILDINGS = {
     // Same as crystal, but only floods along the east/west axis.
     propagate(world, cell) {
       return horizontalNeighbours(world, cell).filter((n) => n.type === "greenCrystal");
+    },
+  },
+
+  drain: {
+    id: "drain",
+    name: "Drain",
+    inert: true,
+    fill: "#241c2c",
+    stroke: "#3c2d47",
+
+    // Tapping a drain deactivates every orthogonally adjacent activated
+    // cell, regardless of type. It never activates anything itself.
+    drain(world, cell) {
+      return orthogonalNeighbours(world, cell).filter((n) => n.activateAt !== null);
     },
   },
 };

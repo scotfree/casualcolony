@@ -209,6 +209,34 @@ checking that its four largest clusters clear the goal — see the "completion
 goal is reachable" test in `test.html`, which re-derives this from the level
 file itself so the two can't silently drift apart.
 
+### Drain — the first tile that costs you progress
+
+Every other building only adds to the activated count. **Drain** is the
+inverse: tapping it deactivates whichever of its orthogonal neighbours are
+currently activated, of any type, and never activates anything itself
+(`inert: true`, no gem is ever drawn). Like any other tap it costs 1 energy —
+but only if it actually drains something; tapping it with no lit neighbours
+is a free no-op, same rule as tapping desert.
+
+This is deliberately the *local* version of the idea, not a flood-fill that
+chases activation through a whole connected cluster. A local drain reuses the
+existing "adjacent cells" shape everything else already has (`drain(world,
+cell)` sits next to `propagate(world, cell)` in the building table) and
+doesn't touch `computeCascade` at all — draining is a second, independent tap
+outcome handled in `game.js`, not a variant of the activation BFS. It's a
+deliberate scope cut: a cascading drain (unraveling an entire lit cluster
+from one tap) is a bigger, higher-stakes mechanic worth trying later, but
+needs its own type-agnostic traversal since it can't reuse `propagate`'s
+per-type filtering. Starting local means finding out whether "losing
+progress" is fun at all before building that.
+
+Because it actively removes cells from the activated count, drain also breaks
+the "sum the top-N disjoint clusters" model the completion-goal-reachability
+test uses to check a level is winnable — that model assumes every tap only
+adds. No shipped level places a drain tile yet (only the legend character is
+registered), so this doesn't bite today, but it's the first thing that will
+need a different kind of solvability check once one does.
+
 ## Decisions so far
 
 | Decision | Why |

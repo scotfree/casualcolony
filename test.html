@@ -75,7 +75,7 @@ function build(rows, extra = {}) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
-    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal" },
+    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal", "D": "drain" },
     grid: rows,
     energyBudget: 99,
     completionGoal: 1,
@@ -192,6 +192,47 @@ test("green crystal only propagates east/west", () => {
 test("red and green crystals don't propagate into each other", () => {
   const world = build(["RG"]);
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "different colors don't mix");
+});
+
+// --- Drain --------------------------------------------------------------
+
+// Coordinates of the cells drain() returns, sorted, for order-independent
+// comparison — mirrors litSet() above.
+function drainSet(world, cell) {
+  return buildingFor(cell).drain(world, cell)
+    .map((c) => `${c.x},${c.y}`)
+    .sort();
+}
+
+test("drain finds nothing when no neighbour is activated", () => {
+  const world = build(["DC"]);
+  assertEqual(drainSet(world, cellAt(world, 0, 0)), [], "nothing lit yet");
+});
+
+test("drain only returns activated orthogonal neighbours", () => {
+  const world = build([
+    "DC",
+    "CC",
+  ]);
+  cellAt(world, 1, 0).activateAt = 0; // lit
+  cellAt(world, 0, 1).activateAt = 0; // lit
+  // (1,1) is diagonal from the drain, not orthogonal, and stays unlit.
+  assertEqual(drainSet(world, cellAt(world, 0, 0)), ["0,1", "1,0"], "orthogonal and lit only");
+});
+
+test("drain doesn't care what type its neighbour is", () => {
+  const world = build(["DR"]);
+  cellAt(world, 1, 0).activateAt = 0;
+  // Red crystal only propagates north/south, but drain isn't propagation —
+  // it reaches any adjacent activated cell regardless of that cell's own rule.
+  assertEqual(drainSet(world, cellAt(world, 0, 0)), ["1,0"], "type-agnostic");
+});
+
+test("drain never activates anything itself", () => {
+  const world = build(["DC"]);
+  cellAt(world, 1, 0).activateAt = 0;
+  buildingFor(cellAt(world, 0, 0)).drain(world, cellAt(world, 0, 0));
+  assertEqual(cellAt(world, 0, 0).activateAt, null, "drain tile stays unactivated");
 });
 
 // --- Level parsing ----------------------------------------------------------
