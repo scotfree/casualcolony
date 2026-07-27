@@ -233,9 +233,13 @@ progress" is fun at all before building that.
 Because it actively removes cells from the activated count, drain also breaks
 the "sum the top-N disjoint clusters" model the completion-goal-reachability
 test uses to check a level is winnable — that model assumes every tap only
-adds. No shipped level places a drain tile yet (only the legend character is
-registered), so this doesn't bite today, but it's the first thing that will
-need a different kind of solvability check once one does.
+adds. The one drain tile placed on the shipped level so far (row 9, column 9)
+doesn't bite today: it sits next to a lone crystal and one cell of the
+biggest cluster, but the reachability test's optimal play never has to tap
+it, so the level stays winnable exactly as computed. It's still the first
+thing that will need a different kind of solvability check once a level's
+*intended* solution routes through a drain, or once several are placed
+densely enough to threaten every top cluster at once.
 
 ## Decisions so far
 
