@@ -4,6 +4,8 @@
     "width": 10,
     "height": 14
   },
+  "energyBudget": 4,
+  "completionGoal": 0.15,
   "legend": {
     ".": "desert",
     "C": "crystal",

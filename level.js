@@ -15,7 +15,7 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid } = data;
+  const { name, size, legend, grid, energyBudget, completionGoal } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -67,7 +67,23 @@ export function parseLevel(data) {
     }
   }
 
-  return { name: name || "Untitled", width: size.width, height: size.height, cells };
+  if (!Number.isInteger(energyBudget) || energyBudget < 1) {
+    throw new Error("Level needs a positive integer energyBudget");
+  }
+  if (typeof completionGoal !== "number" || completionGoal <= 0 || completionGoal > 1) {
+    throw new Error("Level needs completionGoal between 0 (exclusive) and 1 (inclusive)");
+  }
+
+  return {
+    name: name || "Untitled",
+    width: size.width,
+    height: size.height,
+    cells,
+    energyBudget,
+    completionGoal,
+    // Mutable: energy spent tapping cells. Reset to energyBudget to replay.
+    energy: energyBudget,
+  };
 }
 
 export async function loadLevel(url) {

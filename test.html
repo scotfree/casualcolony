@@ -23,6 +23,7 @@
 import { parseLevel } from "./level.js";
 import { computeCascade } from "./cascade.js";
 import { cellAt } from "./grid.js";
+import { buildingFor } from "./buildings.js";
 
 const results = document.getElementById("results");
 let passed = 0;
@@ -68,12 +69,17 @@ function assertThrows(fn, fragment) {
 }
 
 // Build a world from row strings, using the same parser the game uses.
-function build(rows) {
+// Energy and goal are irrelevant to cascade/parsing tests, so give them
+// permissive defaults; tests that care override via extra.
+function build(rows, extra = {}) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
     legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal" },
     grid: rows,
+    energyBudget: 99,
+    completionGoal: 1,
+    ...extra,
   });
 }
 
@@ -235,6 +241,52 @@ test("rejects a missing size", () => {
   assertThrows(() => parseLevel({ legend: {}, grid: [] }), "integer size.width");
 });
 
+test("rejects a missing energyBudget", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    completionGoal: 0.5,
+  }), "positive integer energyBudget");
+});
+
+test("rejects a zero energyBudget", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 0,
+    completionGoal: 0.5,
+  }), "positive integer energyBudget");
+});
+
+test("rejects a completionGoal of zero", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 0,
+  }), "completionGoal between 0");
+});
+
+test("rejects a completionGoal above 1", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 1.5,
+  }), "completionGoal between 0");
+});
+
+test("parses valid energyBudget and completionGoal", () => {
+  const world = build(["C."], { energyBudget: 3, completionGoal: 0.5 });
+  assertEqual(world.energyBudget, 3, "energyBudget");
+  assertEqual(world.completionGoal, 0.5, "completionGoal");
+  assertEqual(world.energy, 3, "energy starts at budget");
+});
+
 // --- The shipped level ------------------------------------------------------
 // Loaded over fetch, so these run asynchronously after the tests above.
 
@@ -264,6 +316,40 @@ fetch("./levels/random-crystal-forest.json")
     test("shipped level: no cluster dominates the board", () => {
       const share = biggest / crystals.length;
       assert(share < 0.35, `biggest cluster was ${biggest} of ${crystals.length}`);
+    });
+
+    test("shipped level: completion goal is reachable within the energy budget", () => {
+      // Connected components across every activatable type (crystal, red, green),
+      // each using its own propagate rule. Doesn't touch activateAt, so it's
+      // independent of the mutation the cluster-dominance test above performs.
+      const seen = new Set();
+      const components = [];
+      for (const cell of world.cells) {
+        if (buildingFor(cell).inert || seen.has(cell)) continue;
+        const stack = [cell];
+        seen.add(cell);
+        let size = 0;
+        while (stack.length > 0) {
+          const current = stack.pop();
+          size++;
+          const building = buildingFor(current);
+          if (!building.propagate) continue;
+          for (const neighbour of building.propagate(world, current)) {
+            if (seen.has(neighbour)) continue;
+            seen.add(neighbour);
+            stack.push(neighbour);
+          }
+        }
+        components.push(size);
+      }
+      components.sort((a, b) => b - a);
+      const reachable = components.slice(0, world.energyBudget).reduce((sum, n) => sum + n, 0);
+      const fraction = reachable / world.cells.length;
+      assert(
+        fraction >= world.completionGoal,
+        `best ${world.energyBudget} taps reach ${(fraction * 100).toFixed(1)}%, ` +
+        `need ${(world.completionGoal * 100).toFixed(1)}%`
+      );
     });
   })
   .catch((error) => {

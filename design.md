@@ -143,7 +143,7 @@ plain crystal — same rules, different color and axis.
 its connected group of crystals. Active crystals are highlighted.
 
 **No energy, no win condition yet** — this milestone is about making the
-cascade feel good.
+cascade feel good. (Energy and win/lose arrive in Milestone 2, below.)
 
 ### The ripple
 
@@ -180,6 +180,35 @@ right — but specifically for orthogonal adjacency. Density and adjacency have
 to be chosen together, and density is the main dial for tuning cascade size
 later.
 
+## Milestone 2 — Energy budget and win/lose
+
+Turns the sandbox into a puzzle with a real end state, still with no ticking
+and no runtime randomness.
+
+**Level data gains two fields:**
+
+- `energyBudget` — a positive integer. Each tap that actually activates
+  something (a non-empty cascade) spends exactly 1, regardless of how many
+  cells the cascade lights — the player pays for the decision, not the
+  payoff. A tap on desert or an already-lit cell is a no-op and free.
+- `completionGoal` — a fraction between 0 (exclusive) and 1 (inclusive) of
+  **every** cell on the board, inert ones included. This caps what's
+  actually reachable at the board's crystal density, which is the point: the
+  goal has to be chosen relative to what the level's clusters can deliver.
+
+**Game over** is reached once energy hits 0 *and* every scheduled cascade has
+finished its ripple animation — the last chain reaction still gets to play
+out before the outcome screen appears. At that point the fraction of
+activated cells is compared to `completionGoal`: meet or beat it and it's a
+win, fall short and it's a loss. Reset clears the board and restores the
+budget so the level replays deterministically.
+
+The shipped level's `energyBudget: 4` / `completionGoal: 0.15` were chosen by
+actually computing the level's connected components per building type and
+checking that its four largest clusters clear the goal — see the "completion
+goal is reachable" test in `test.html`, which re-derives this from the level
+file itself so the two can't silently drift apart.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -189,15 +218,19 @@ later.
 | Fixed grid, letterboxed square cells | Every player sees the same puzzle; a grid with non-square cells looks wrong |
 | Ripple via BFS depth + timestamps | Cascade feel, with no timers and a pure, testable traversal |
 | Sandbox before energy | Get the cascade feeling right before adding pressure |
+| Energy costs 1 per tap, not per cell lit | Rewards finding big connected clusters instead of counting cells |
+| Completion goal is a fraction of the whole board | Ties level design directly to crystal density instead of a second hidden number |
 
 ## Open questions
 
-- How is control measured — active cell count, or something spatial?
+- How is control measured — active cell count, or something spatial? *(Now:
+  fraction of all cells activated, checked once at game over. Spatial /
+  contiguous-territory measures are still open.)*
 - Do buildings ever deactivate?
 - Are levels hand-authored, or generated offline and then curated?
 - Does the player ever *place* buildings, or only activate what's there?
 - Where does energy come from at the start of a level — fixed budget, or seeded
-  by a starting building?
+  by a starting building? *(Now: a fixed `energyBudget` per level.)*
 
 ## Explicitly not doing yet
 

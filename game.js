@@ -6,7 +6,7 @@ import { computeCascade } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const LEVEL_URL = "./levels/random-crystal-forest.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -14,7 +14,7 @@ const LEVEL_URL = "./levels/random-crystal-forest.json";
 const RIPPLE_STEP = 70;
 const LIGHT_TIME = 220;
 
-const HUD_HEIGHT = 44;
+const HUD_HEIGHT = 58;
 const BOARD_MARGIN = 10;
 
 const canvas = document.getElementById("game");
@@ -22,6 +22,9 @@ const ctx = canvas.getContext("2d");
 
 let world = null;
 let loadError = null;
+// null while playing, "win" or "lose" once energy runs out and the last
+// cascade has finished animating.
+let outcome = null;
 
 // Board geometry, recomputed on resize.
 let width = 0;
@@ -89,18 +92,27 @@ canvas.addEventListener("pointerdown", (event) => {
 
   if (hitsResetButton(event.clientX, event.clientY)) {
     for (const cell of world.cells) cell.activateAt = null;
+    world.energy = world.energyBudget;
+    outcome = null;
     return;
   }
+
+  // No taps once the budget is spent — the run is over, win or lose.
+  if (world.energy <= 0) return;
 
   const cell = cellFromPoint(event.clientX, event.clientY);
   if (!cell) return;
 
+  const cascade = computeCascade(world, cell);
+  if (cascade.length === 0) return; // nothing activated, so no energy spent
+
   // Schedule the whole chain up front: each cell lights when the clock reaches
   // its activateAt. No timers to manage, and the ripple falls out of BFS depth.
   const now = performance.now();
-  for (const { cell: target, depth } of computeCascade(world, cell)) {
+  for (const { cell: target, depth } of cascade) {
     target.activateAt = now + depth * RIPPLE_STEP;
   }
+  world.energy -= 1;
 });
 
 // --- Rendering --------------------------------------------------------------
@@ -113,6 +125,19 @@ function litProgress(cell, now) {
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
+}
+
+// Settles the win/lose outcome once energy is spent and every scheduled
+// cascade has finished animating — not the instant energy hits zero, so the
+// last ripple still gets to play out.
+function updateOutcome(now) {
+  if (!world || outcome || world.energy > 0) return;
+  for (const cell of world.cells) {
+    if (cell.activateAt !== null && now < cell.activateAt + LIGHT_TIME) return;
+  }
+  const activated = world.cells.filter((cell) => cell.activateAt !== null).length;
+  const fraction = activated / world.cells.length;
+  outcome = fraction >= world.completionGoal ? "win" : "lose";
 }
 
 function drawCell(cell, now) {
@@ -160,35 +185,57 @@ function drawCell(cell, now) {
   ctx.shadowBlur = 0;
 }
 
-function drawHud(now) {
-  let active = 0;
-  let total = 0;
-  for (const cell of world.cells) {
-    if (buildingFor(cell).inert) continue;
-    total++;
-    if (litProgress(cell, now) > 0) active++;
-  }
+function drawHud() {
+  // Counted the same way as the win condition — a fraction of every cell on
+  // the board, not just the activatable ones — so this number and the
+  // completion goal shown on the outcome screen never disagree.
+  const active = world.cells.filter((cell) => cell.activateAt !== null).length;
+  const total = world.cells.length;
 
-  const y = HUD_HEIGHT / 2;
+  // Two rows: name + reset on top, activation/energy stats below. A single
+  // row overlapped the name with the stats on narrow phones.
+  const row1 = HUD_HEIGHT * 0.36;
+  const row2 = HUD_HEIGHT * 0.76;
   ctx.textBaseline = "middle";
 
   ctx.fillStyle = "#8ea3b5";
   ctx.textAlign = "left";
   ctx.font = "13px ui-monospace, monospace";
-  ctx.fillText(world.name, 14, y);
+  ctx.fillText(world.name, 14, row1);
 
   ctx.fillStyle = "#5eead4";
   ctx.textAlign = "center";
-  ctx.fillText(`${active} / ${total}`, width / 2, y);
+  ctx.fillText(`${active} / ${total} activated   ⚡ ${world.energy}`, width / 2, row2);
 
   const label = "reset";
   ctx.fillStyle = "#4a5568";
   ctx.textAlign = "right";
-  ctx.fillText(label, width - 14, y);
+  ctx.fillText(label, width - 14, row1);
 
   // Generous tap target around the label — 13px text is far too small to hit.
   const textWidth = ctx.measureText(label).width;
   resetButton = { x: width - 14 - textWidth - 12, y: 0, w: textWidth + 26, h: HUD_HEIGHT };
+}
+
+function drawOutcome() {
+  const activated = world.cells.filter((cell) => cell.activateAt !== null).length;
+  const fraction = activated / world.cells.length;
+
+  ctx.fillStyle = "#12161ccc";
+  ctx.fillRect(0, HUD_HEIGHT, width, height - HUD_HEIGHT);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = outcome === "win" ? "#5eead4" : "#f87171";
+  ctx.font = "20px ui-monospace, monospace";
+  ctx.fillText(outcome === "win" ? "You win" : "Out of energy", width / 2, height / 2 - 14);
+
+  ctx.fillStyle = "#8ea3b5";
+  ctx.font = "13px ui-monospace, monospace";
+  const goalPct = Math.round(world.completionGoal * 100);
+  const gotPct = Math.round(fraction * 100);
+  ctx.fillText(`${gotPct}% activated · goal was ${goalPct}%`, width / 2, height / 2 + 14);
+  ctx.fillText("tap reset to try again", width / 2, height / 2 + 36);
 }
 
 function drawError(message) {
@@ -215,12 +262,14 @@ function render(now) {
   if (!world) return;
 
   for (const cell of world.cells) drawCell(cell, now);
-  drawHud(now);
+  drawHud();
+  if (outcome) drawOutcome();
 }
 
 // --- Loop -------------------------------------------------------------------
 
 function frame(now) {
+  updateOutcome(now);
   render(now);
   requestAnimationFrame(frame);
 }
