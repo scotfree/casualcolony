@@ -13,16 +13,16 @@
   "grid": [
     "..C..CC..C",
     "CC.CCC.CCC",
-    "C.C.C.CCC.",
+    "C.C.C.GGGG",
     "C.CC.C..C.",
     "CC....CC..",
     "..CC.CCC..",
     "CC.C....CC",
     ".C.C....C.",
-    "C...CC.C.C",
-    ".CC.C..C..",
-    "...C...CCC",
-    ".C.C..CC..",
+    "C...CR.C.C",
+    ".CC.CR.C..",
+    "...C.R.CCC",
+    ".C.C.RCC..",
     ".....C....",
     "C.CCC.CCC."
   ]
