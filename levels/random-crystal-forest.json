@@ -6,7 +6,9 @@
   },
   "legend": {
     ".": "desert",
-    "C": "crystal"
+    "C": "crystal",
+    "R": "redCrystal",
+    "G": "greenCrystal"
   },
   "grid": [
     "..C..CC..C",

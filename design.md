@@ -132,6 +132,11 @@ mechanics.
 - **Desert** — inert. Does nothing. Blocks propagation.
 - **Crystal** — when activated, activates every adjacent crystal.
 
+Two color variants restrict propagation to one axis, trading flood size for
+directional control: **red crystal** only activates north/south neighbours,
+**green crystal** only activates east/west neighbours. Otherwise identical to
+plain crystal — same rules, different color and axis.
+
 **Setup:** each cell is a crystal with probability ~0.5, otherwise desert.
 
 **Interaction:** tap a crystal. It activates, and the activation floods through

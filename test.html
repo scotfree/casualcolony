@@ -72,7 +72,7 @@ function build(rows) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
-    legend: { ".": "desert", "C": "crystal" },
+    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal" },
     grid: rows,
   });
 }
@@ -161,6 +161,31 @@ test("every cell appears at most once", () => {
   const unique = new Set(cascade.map(({ cell }) => cell));
   assertEqual(cascade.length, unique.size, "no duplicates");
   assertEqual(cascade.length, 6, "whole block");
+});
+
+test("red crystal only propagates north/south", () => {
+  const world = build([
+    "RRR",
+    ".R.",
+    "RRR",
+  ]);
+  // The middle column connects vertically; the top and bottom rows don't
+  // connect to each other horizontally, since red ignores east/west.
+  assertEqual(litSet(world, cellAt(world, 1, 0)), ["1,0", "1,1", "1,2"], "vertical chain only");
+});
+
+test("green crystal only propagates east/west", () => {
+  const world = build([
+    "R.G",
+    "GGG",
+    "R.G",
+  ]);
+  assertEqual(litSet(world, cellAt(world, 0, 1)), ["0,1", "1,1", "2,1"], "horizontal chain only");
+});
+
+test("red and green crystals don't propagate into each other", () => {
+  const world = build(["RG"]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "different colors don't mix");
 });
 
 // --- Level parsing ----------------------------------------------------------

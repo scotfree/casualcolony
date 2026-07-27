@@ -7,7 +7,7 @@
 // propagate(world, cell) returns the cells this building activates when it
 // becomes active. Omit it for buildings that don't spread.
 
-import { orthogonalNeighbours } from "./grid.js";
+import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
 export const BUILDINGS = {
   desert: {
@@ -32,6 +32,38 @@ export const BUILDINGS = {
     // Applied repeatedly by the cascade, this floods the whole connected group.
     propagate(world, cell) {
       return orthogonalNeighbours(world, cell).filter((n) => n.type === "crystal");
+    },
+  },
+
+  redCrystal: {
+    id: "redCrystal",
+    name: "Red Crystal",
+    inert: false,
+    fill: "#2c1f24",
+    stroke: "#472f37",
+    dormant: "#6b3d47",
+    lit: "#f87171",
+    glow: "#ef4444",
+
+    // Same as crystal, but only floods along the north/south axis.
+    propagate(world, cell) {
+      return verticalNeighbours(world, cell).filter((n) => n.type === "redCrystal");
+    },
+  },
+
+  greenCrystal: {
+    id: "greenCrystal",
+    name: "Green Crystal",
+    inert: false,
+    fill: "#1f2c22",
+    stroke: "#2f4736",
+    dormant: "#3d6b4a",
+    lit: "#4ade80",
+    glow: "#22c55e",
+
+    // Same as crystal, but only floods along the east/west axis.
+    propagate(world, cell) {
+      return horizontalNeighbours(world, cell).filter((n) => n.type === "greenCrystal");
     },
   },
 };
