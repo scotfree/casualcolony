@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Casual Colony — tests</title>
+<style>
+  body { background: #12161c; color: #c7d3de; font: 13px/1.6 ui-monospace, Menlo, monospace; padding: 20px; }
+  h1 { font-size: 15px; font-weight: normal; color: #8ea3b5; }
+  .pass::before { content: "PASS  "; color: #5eead4; }
+  .fail::before { content: "FAIL  "; color: #f87171; }
+  .fail { color: #f87171; }
+  .detail { color: #6b7f91; padding-left: 46px; }
+  #summary { margin-top: 16px; padding-top: 12px; border-top: 1px solid #263341; }
+</style>
+</head>
+<body>
+<h1>Casual Colony — tests</h1>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script type="module">
+import { parseLevel } from "./level.js";
+import { computeCascade } from "./cascade.js";
+import { cellAt } from "./grid.js";
+
+const results = document.getElementById("results");
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed++;
+    add("pass", name);
+  } catch (error) {
+    failed++;
+    add("fail", name);
+    add("detail", error.message);
+  }
+}
+
+function add(className, text) {
+  const div = document.createElement("div");
+  div.className = className;
+  div.textContent = text;
+  results.appendChild(div);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function assertEqual(actual, expected, message) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`${message}\n  expected ${e}\n  actual   ${a}`);
+}
+
+function assertThrows(fn, fragment) {
+  let threw = null;
+  try { fn(); } catch (error) { threw = error; }
+  assert(threw !== null, `expected a throw mentioning "${fragment}", got none`);
+  assert(
+    threw.message.includes(fragment),
+    `expected error mentioning "${fragment}", got "${threw.message}"`
+  );
+}
+
+// Build a world from row strings, using the same parser the game uses.
+function build(rows) {
+  return parseLevel({
+    name: "test",
+    size: { width: rows[0].length, height: rows.length },
+    legend: { ".": "desert", "C": "crystal" },
+    grid: rows,
+  });
+}
+
+// Cascade cells as "x,y" strings, sorted, for order-independent comparison.
+function litSet(world, start) {
+  return computeCascade(world, start)
+    .map(({ cell }) => `${cell.x},${cell.y}`)
+    .sort();
+}
+
+// --- Cascade ----------------------------------------------------------------
+
+test("cascade lights the whole connected group", () => {
+  const world = build([
+    "CC.",
+    "C..",
+    "...",
+  ]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "0,1", "1,0"], "group");
+});
+
+test("cascade does not cross a diagonal", () => {
+  const world = build([
+    "C.",
+    ".C",
+  ]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "diagonal must not connect");
+});
+
+test("cascade stops at desert", () => {
+  const world = build([
+    "C.C",
+  ]);
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "desert blocks");
+});
+
+test("a lone crystal still activates itself", () => {
+  const world = build([".C."]);
+  assertEqual(litSet(world, cellAt(world, 1, 0)), ["1,0"], "lone crystal");
+});
+
+test("tapping desert does nothing", () => {
+  const world = build(["C.C"]);
+  assertEqual(computeCascade(world, cellAt(world, 1, 0)), [], "desert is inert");
+});
+
+test("tapping an already-scheduled cell does nothing", () => {
+  const world = build(["CC"]);
+  cellAt(world, 0, 0).activateAt = 0;
+  assertEqual(computeCascade(world, cellAt(world, 0, 0)), [], "no re-trigger");
+});
+
+test("cascade skips cells already lit by an earlier tap", () => {
+  const world = build(["CCC"]);
+  cellAt(world, 1, 0).activateAt = 0;
+  // The middle cell is already lit, so it blocks the walk to the far end.
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lit cells block");
+});
+
+test("depth increases with distance from the tap", () => {
+  const world = build(["CCCC"]);
+  const depths = computeCascade(world, cellAt(world, 0, 0)).map((step) => step.depth);
+  assertEqual(depths, [0, 1, 2, 3], "ripple depth");
+});
+
+test("depth is shortest-path, not traversal order", () => {
+  // A ring with a desert hole. The cell opposite the tap is reachable down
+  // either arm, four steps around; a depth-first walk would report more.
+  const world = build([
+    "CCC",
+    "C.C",
+    "CCC",
+  ]);
+  const cascade = computeCascade(world, cellAt(world, 1, 0));
+  const opposite = cascade.find(({ cell }) => cell.x === 1 && cell.y === 2);
+  assertEqual(opposite.depth, 4, "shortest path around the ring");
+});
+
+test("every cell appears at most once", () => {
+  const world = build([
+    "CCC",
+    "CCC",
+  ]);
+  const cascade = computeCascade(world, cellAt(world, 0, 0));
+  const unique = new Set(cascade.map(({ cell }) => cell));
+  assertEqual(cascade.length, unique.size, "no duplicates");
+  assertEqual(cascade.length, 6, "whole block");
+});
+
+// --- Level parsing ----------------------------------------------------------
+
+test("parses a valid level", () => {
+  const world = build(["C.", ".C"]);
+  assertEqual(world.width, 2, "width");
+  assertEqual(world.height, 2, "height");
+  assertEqual(world.cells.length, 4, "cell count");
+  assertEqual(cellAt(world, 0, 0).type, "crystal", "top left");
+  assertEqual(cellAt(world, 1, 0).type, "desert", "top right");
+});
+
+test("rejects a row of the wrong length", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 3, height: 2 },
+    legend: { ".": "desert" },
+    grid: ["...", ".."],
+  }), "row 1 has 2 characters");
+});
+
+test("rejects the wrong number of rows", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 2, height: 3 },
+    legend: { ".": "desert" },
+    grid: ["..", ".."],
+  }), "grid has 2 rows");
+});
+
+test("rejects an unknown grid character", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 2, height: 1 },
+    legend: { ".": "desert" },
+    grid: [".X"],
+  }), "Unknown character 'X'");
+});
+
+test("rejects a legend pointing at an unknown building", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { "?": "sawmill" },
+    grid: ["?"],
+  }), "unknown building type 'sawmill'");
+});
+
+test("rejects a missing size", () => {
+  assertThrows(() => parseLevel({ legend: {}, grid: [] }), "integer size.width");
+});
+
+// --- The shipped level ------------------------------------------------------
+// Loaded over fetch, so these run asynchronously after the tests above.
+
+const summary = document.getElementById("summary");
+
+fetch("./levels/random-crystal-forest.json")
+  .then((response) => response.json())
+  .then((data) => {
+    const world = parseLevel(data);
+    const crystals = world.cells.filter((c) => c.type === "crystal");
+
+    // Walk every cluster once and check none of them spans the board, which
+    // would mean one tap lights nearly everything.
+    let biggest = 0;
+    for (const cell of world.cells) {
+      if (cell.type !== "crystal" || cell.activateAt !== null) continue;
+      const cascade = computeCascade(world, cell);
+      for (const { cell: c } of cascade) c.activateAt = 0;
+      biggest = Math.max(biggest, cascade.length);
+    }
+
+    test("shipped level: density is near half", () => {
+      const density = crystals.length / world.cells.length;
+      assert(density > 0.35 && density < 0.6, `density was ${density.toFixed(2)}`);
+    });
+
+    test("shipped level: no cluster dominates the board", () => {
+      const share = biggest / crystals.length;
+      assert(share < 0.35, `biggest cluster was ${biggest} of ${crystals.length}`);
+    });
+  })
+  .catch((error) => {
+    failed++;
+    add("fail", "shipped level could not be loaded");
+    add("detail", error.message);
+  })
+  .finally(() => {
+    summary.textContent = `${passed} passed, ${failed} failed`;
+    summary.style.color = failed > 0 ? "#f87171" : "#5eead4";
+  });
+</script>
+</body>
+</html>

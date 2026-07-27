@@ -18,6 +18,18 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* The stage carries the safe-area insets, so the canvas can simply fill it and
+   no JS needs to know about notches or home indicators. */
+#stage {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
 #game {
   display: block;
   width: 100%;
