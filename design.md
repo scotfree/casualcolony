@@ -212,34 +212,51 @@ file itself so the two can't silently drift apart.
 ### Drain — the first tile that costs you progress
 
 Every other building only adds to the activated count. **Drain** is the
-inverse: tapping it deactivates whichever of its orthogonal neighbours are
-currently activated, of any type, and never activates anything itself
-(`inert: true`, no gem is ever drawn). Like any other tap it costs 1 energy —
-but only if it actually drains something; tapping it with no lit neighbours
-is a free no-op, same rule as tapping desert.
+inverse: it deactivates whichever of its orthogonal neighbours are currently
+activated, of any type, and never activates anything itself (`inert: true`,
+its gem is a fixed marker color, not a dormant/lit pair). It fires two ways:
 
-This is deliberately the *local* version of the idea, not a flood-fill that
-chases activation through a whole connected cluster. A local drain reuses the
-existing "adjacent cells" shape everything else already has (`drain(world,
-cell)` sits next to `propagate(world, cell)` in the building table) and
-doesn't touch `computeCascade` at all — draining is a second, independent tap
-outcome handled in `game.js`, not a variant of the activation BFS. It's a
-deliberate scope cut: a cascading drain (unraveling an entire lit cluster
-from one tap) is a bigger, higher-stakes mechanic worth trying later, but
-needs its own type-agnostic traversal since it can't reuse `propagate`'s
-per-type filtering. Starting local means finding out whether "losing
-progress" is fun at all before building that.
+- **Tapped directly** — costs 1 energy, but only if it actually drains
+  something; tapping it with no lit neighbours is a free no-op, same rule as
+  tapping desert.
+- **Reactively** — the instant any tap's cascade activates a cell next to a
+  drain, the drain fires on its own, for free, clearing that cell along with
+  any other already-activated neighbour it has. One neighbour lighting up is
+  enough, the same way one lit neighbour is enough to spread a normal
+  crystal — a drain doesn't wait for a second neighbour before reacting, it
+  absorbs the first one immediately. In practice this means a cell adjacent
+  to a drain can never *stay* lit: the moment a cascade would light it, the
+  same synchronous pass that scheduled it also clears it, so it never even
+  pops in on screen.
 
-Because it actively removes cells from the activated count, drain also breaks
-the "sum the top-N disjoint clusters" model the completion-goal-reachability
-test uses to check a level is winnable — that model assumes every tap only
-adds. The one drain tile placed on the shipped level so far (row 9, column 9)
-doesn't bite today: it sits next to a lone crystal and one cell of the
-biggest cluster, but the reachability test's optimal play never has to tap
-it, so the level stays winnable exactly as computed. It's still the first
-thing that will need a different kind of solvability check once a level's
-*intended* solution routes through a drain, or once several are placed
-densely enough to threaten every top cluster at once.
+`triggeredDrains(world)` (`cascade.js`) is what makes the reactive half
+possible: a pure scan of the whole board for any drain with 1+ activated
+neighbour, called after every cascade is scheduled. It can't loop or need a
+fixed point — clearing a cell never creates a new trigger for some *other*
+drain, since draining only removes activation, never adds it — so one pass
+always catches everything. The direct-tap path (`building.drain(world,
+cell)` in the table, same as `propagate`) is unchanged and still exists
+independently, though in practice it's almost always a no-op now: anything
+it could drain, the reactive pass already caught the moment it lit.
+
+Both paths stay *local* — neither is a flood-fill that chases activation
+through a whole connected cluster. A cascading drain (unraveling an entire
+lit cluster from one tap) is a bigger, higher-stakes mechanic worth trying
+later, but needs its own type-agnostic traversal since it can't reuse
+`propagate`'s per-type filtering. Starting local means finding out whether
+"losing progress" is fun at all before building that.
+
+Because it removes cells from the activated count, drain also breaks the
+"sum the top-N disjoint clusters" model the completion-goal-reachability test
+uses to check a level is winnable — that model assumes every tap only adds,
+and now doesn't know that a cell adjacent to a drain can never actually be
+banked. The one drain on the shipped level (row 9, column 9) touches a lone
+crystal and one cell of the board's biggest cluster; both are permanently
+undrainable in practice now, shrinking that cluster's *real* contribution
+from 7 to 6. The level stays winnable regardless — the corrected top 4 sum to
+23 of 140 (16%), still clearing the 15% goal — but this was checked by hand,
+not by the test, which still reports the old, now slightly optimistic number.
+That's the first thing a proper solvability check needs to account for.
 
 ## Decisions so far
 

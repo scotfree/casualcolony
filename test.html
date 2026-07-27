@@ -21,7 +21,7 @@
 
 <script type="module">
 import { parseLevel } from "./level.js";
-import { computeCascade } from "./cascade.js";
+import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 
@@ -233,6 +233,70 @@ test("drain never activates anything itself", () => {
   cellAt(world, 1, 0).activateAt = 0;
   buildingFor(cellAt(world, 0, 0)).drain(world, cellAt(world, 0, 0));
   assertEqual(cellAt(world, 0, 0).activateAt, null, "drain tile stays unactivated");
+});
+
+// --- Reactive drains (triggeredDrains) ---------------------------------------
+// A drain isn't only tapped directly — it also has to notice when a tap
+// *elsewhere* lights up one of its neighbours, the same tick that happens.
+
+test("triggeredDrains finds nothing on a quiet board", () => {
+  const world = build(["DC"]);
+  assertEqual(triggeredDrains(world), [], "nothing lit, nothing triggered");
+});
+
+test("triggeredDrains fires the moment a single neighbour lights up", () => {
+  const world = build(["DC"]);
+  cellAt(world, 1, 0).activateAt = 0;
+  const triggered = triggeredDrains(world);
+  assertEqual(triggered.length, 1, "one drain triggered");
+  assertEqual(triggered[0].targets, [cellAt(world, 1, 0)], "targets the newly lit neighbour");
+});
+
+test("a neighbour already lit, plus a fresh one, are both reported", () => {
+  // The scenario from the bug report: north already lit, then south lights
+  // up from an unrelated tap — the drain should catch both.
+  const world = build([
+    ".C.",
+    ".D.",
+    ".C.",
+  ]);
+  cellAt(world, 1, 0).activateAt = 0; // north, lit earlier
+  cellAt(world, 1, 2).activateAt = 0; // south, just lit
+  const triggered = triggeredDrains(world);
+  assertEqual(triggered.length, 1, "one drain triggered");
+  const coords = triggered[0].targets.map((c) => `${c.x},${c.y}`).sort();
+  assertEqual(coords, ["1,0", "1,2"], "both north and south are targeted");
+});
+
+test("triggeredDrains reports each triggered sink independently", () => {
+  const world = build(["DCD"]);
+  cellAt(world, 1, 0).activateAt = 0;
+  const triggered = triggeredDrains(world);
+  const sinks = triggered.map((t) => `${t.sink.x},${t.sink.y}`).sort();
+  assertEqual(sinks, ["0,0", "2,0"], "the lit crystal borders two drains, both fire");
+});
+
+test("end to end: separate taps near a drain each get absorbed immediately", () => {
+  // Mirrors what game.js actually does: schedule a cascade, then resolve
+  // drains, across two separate taps. A lone neighbour is enough to trigger
+  // a drain — same as one neighbour is enough to trigger a normal crystal —
+  // so neither tap here gets to stay lit even for a moment.
+  const world = build([
+    ".C.",
+    ".D.",
+    ".C.",
+  ]);
+  for (const { cell } of computeCascade(world, cellAt(world, 1, 0))) cell.activateAt = 0;
+  for (const { sink, targets } of triggeredDrains(world)) {
+    for (const target of targets) target.activateAt = null;
+  }
+  assertEqual(cellAt(world, 1, 0).activateAt, null, "north absorbed the instant it lit");
+
+  for (const { cell } of computeCascade(world, cellAt(world, 1, 2))) cell.activateAt = 0;
+  for (const { sink, targets } of triggeredDrains(world)) {
+    for (const target of targets) target.activateAt = null;
+  }
+  assertEqual(cellAt(world, 1, 2).activateAt, null, "south absorbed too, on its own separate tap");
 });
 
 // --- Level parsing ----------------------------------------------------------

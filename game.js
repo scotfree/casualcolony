@@ -2,11 +2,11 @@
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
 import { loadLevel } from "./level.js";
-import { computeCascade } from "./cascade.js";
+import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 
-const VERSION = "0.3.1";
+const VERSION = "0.4.0";
 const LEVEL_URL = "./levels/random-crystal-forest.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -126,6 +126,14 @@ canvas.addEventListener("pointerdown", (event) => {
     target.activateAt = now + depth * RIPPLE_STEP;
   }
   world.energy -= 1;
+
+  // Any drain adjacent to a cell this cascade just lit reacts immediately —
+  // it can't create a new trigger for another drain (draining only removes
+  // activation), so one pass over the whole board is enough.
+  for (const { sink, targets } of triggeredDrains(world)) {
+    for (const target of targets) target.activateAt = null;
+    sink.drainedAt = now;
+  }
 });
 
 // --- Rendering --------------------------------------------------------------

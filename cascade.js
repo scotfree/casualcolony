@@ -7,6 +7,11 @@
 // The BFS *depth* is the useful part: cells at depth 0 light immediately,
 // depth 1 a moment later, and so on. Playing back depth by depth is exactly a
 // ripple travelling outward from the player's finger.
+//
+// Drains don't fit that model — they're reactive, not tapped-and-propagated.
+// triggeredDrains() below is the other half of the picture: not a walk
+// outward from one cell, but a scan for any drain whose neighbourhood
+// changed.
 
 import { buildingFor } from "./buildings.js";
 
@@ -44,4 +49,21 @@ export function computeCascade(world, start) {
   }
 
   return result;
+}
+
+// Returns [{ sink, targets }] for every drain tile that currently has at
+// least one activated orthogonal neighbour — targets is what that drain
+// would clear. Call this after scheduling a cascade so a drain reacts the
+// same tick a neighbour lights up, whether that neighbour is brand new or
+// was already lit from an earlier tap. Pure: reads the world, changes
+// nothing; the caller applies the deactivation.
+export function triggeredDrains(world) {
+  const triggered = [];
+  for (const cell of world.cells) {
+    const building = buildingFor(cell);
+    if (!building.drain) continue;
+    const targets = building.drain(world, cell);
+    if (targets.length > 0) triggered.push({ sink: cell, targets });
+  }
+  return triggered;
 }
