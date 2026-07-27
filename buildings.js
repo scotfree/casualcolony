@@ -78,6 +78,11 @@ export const BUILDINGS = {
     inert: true,
     fill: "#241c2c",
     stroke: "#3c2d47",
+    // Static marker gem — a drain never activates, so it has no
+    // dormant/lit pair, just a fixed color plus a brief brighter pulse
+    // (glow) the moment it actually drains something.
+    icon: "#a855f7",
+    glow: "#c084fc",
 
     // Tapping a drain deactivates every orthogonally adjacent activated
     // cell, regardless of type. It never activates anything itself.

@@ -6,7 +6,7 @@ import { computeCascade } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 const LEVEL_URL = "./levels/random-crystal-forest.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -91,7 +91,10 @@ canvas.addEventListener("pointerdown", (event) => {
   if (!world) return;
 
   if (hitsResetButton(event.clientX, event.clientY)) {
-    for (const cell of world.cells) cell.activateAt = null;
+    for (const cell of world.cells) {
+      cell.activateAt = null;
+      cell.drainedAt = null;
+    }
     world.energy = world.energyBudget;
     outcome = null;
     return;
@@ -109,6 +112,7 @@ canvas.addEventListener("pointerdown", (event) => {
     if (drained.length === 0) return; // nothing to drain, so no energy spent
     for (const target of drained) target.activateAt = null;
     world.energy -= 1;
+    cell.drainedAt = performance.now(); // brief self-pulse, see drawCell
     return;
   }
 
@@ -132,8 +136,26 @@ function litProgress(cell, now) {
   return Math.min((now - cell.activateAt) / LIGHT_TIME, 1);
 }
 
+// 1 right when a drain fires, fading to 0 over LIGHT_TIME — a self-pulse so
+// tapping a drain reads as "this did something" even before you spot the
+// neighbour it drained going dark.
+function drainPulse(cell, now) {
+  if (cell.drainedAt === null) return 0;
+  return Math.max(0, 1 - (now - cell.drainedAt) / LIGHT_TIME);
+}
+
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
+}
+
+function drawDiamond(cx, cy, gem) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - gem);
+  ctx.lineTo(cx + gem, cy);
+  ctx.lineTo(cx, cy + gem);
+  ctx.lineTo(cx - gem, cy);
+  ctx.closePath();
+  ctx.fill();
 }
 
 // Settles the win/lose outcome once energy is spent and every scheduled
@@ -165,6 +187,25 @@ function drawCell(cell, now) {
   ctx.fill();
   ctx.stroke();
 
+  const cx = x + cellSize / 2;
+  const cy = y + cellSize / 2;
+
+  // A static marker gem for buildings with no on/off state of their own
+  // (drain): always visible at a fixed size, with a brief brighter pulse
+  // the moment it actually does something.
+  if (building.icon) {
+    const pulse = drainPulse(cell, now);
+    const gem = size * 0.44 * (1 + Math.sin(pulse * Math.PI) * 0.14);
+    if (pulse > 0) {
+      ctx.shadowColor = building.glow;
+      ctx.shadowBlur = 18 * pulse;
+    }
+    ctx.fillStyle = building.icon;
+    drawDiamond(cx, cy, gem);
+    ctx.shadowBlur = 0;
+    return;
+  }
+
   if (building.inert) return;
 
   const t = litProgress(cell, now);
@@ -174,23 +215,13 @@ function drawCell(cell, now) {
   const pop = Math.sin(eased * Math.PI) * 0.14;
   const scale = (0.55 + 0.45 * eased) * (1 + pop);
   const gem = size * 0.44 * scale;
-  const cx = x + cellSize / 2;
-  const cy = y + cellSize / 2;
 
   if (t > 0) {
     ctx.shadowColor = building.glow;
     ctx.shadowBlur = 18 * eased;
   }
   ctx.fillStyle = t > 0 ? building.lit : building.dormant;
-
-  // Diamond.
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - gem);
-  ctx.lineTo(cx + gem, cy);
-  ctx.lineTo(cx, cy + gem);
-  ctx.lineTo(cx - gem, cy);
-  ctx.closePath();
-  ctx.fill();
+  drawDiamond(cx, cy, gem);
   ctx.shadowBlur = 0;
 }
 

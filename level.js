@@ -63,6 +63,9 @@ export function parseLevel(data) {
         // null until the cell is scheduled to light up. Once set, it holds the
         // timestamp at which the cell becomes active — see cascade.js.
         activateAt: null,
+        // null except briefly after a drain tile fires — holds the timestamp
+        // of that tap, purely for the self-pulse animation. See game.js.
+        drainedAt: null,
       });
     }
   }
