@@ -134,8 +134,16 @@ mechanics.
 
 Two color variants restrict propagation to one axis, trading flood size for
 directional control: **red crystal** only activates north/south neighbours,
-**green crystal** only activates east/west neighbours. Otherwise identical to
-plain crystal — same rules, different color and axis.
+**green crystal** only activates east/west neighbours.
+
+Color is cosmetic, not a compatibility gate: all three (plain, red, green)
+activate each other freely — a plain crystal next to a red one lights it just
+like it would another plain crystal. Only the *axis* is per-color; who counts
+as a valid neighbour is shared across the whole crystal family
+(`CRYSTAL_TYPES` in `buildings.js`). Reachability, from any given cell, is
+always that cell's own axis — a red crystal reaches north/south regardless of
+what color sits there, but a green crystal two steps further west is only
+reached if something along the way had an axis that pointed that way.
 
 **Setup:** each cell is a crystal with probability ~0.5, otherwise desert.
 
@@ -242,21 +250,24 @@ it could drain, the reactive pass already caught the moment it lit.
 Both paths stay *local* — neither is a flood-fill that chases activation
 through a whole connected cluster. A cascading drain (unraveling an entire
 lit cluster from one tap) is a bigger, higher-stakes mechanic worth trying
-later, but needs its own type-agnostic traversal since it can't reuse
-`propagate`'s per-type filtering. Starting local means finding out whether
-"losing progress" is fun at all before building that.
+later, but needs its own traversal, since `propagate`-style reachability
+only makes sense outward from a single tapped cell — draining instead has to
+start from *every* currently-lit cell within a cluster at once. Starting
+local means finding out whether "losing progress" is fun at all before
+building that.
 
 Because it removes cells from the activated count, drain also breaks the
 "sum the top-N disjoint clusters" model the completion-goal-reachability test
 uses to check a level is winnable — that model assumes every tap only adds,
 and now doesn't know that a cell adjacent to a drain can never actually be
 banked. The one drain on the shipped level (row 9, column 9) touches a lone
-crystal and one cell of the board's biggest cluster; both are permanently
-undrainable in practice now, shrinking that cluster's *real* contribution
-from 7 to 6. The level stays winnable regardless — the corrected top 4 sum to
-23 of 140 (16%), still clearing the 15% goal — but this was checked by hand,
-not by the test, which still reports the old, now slightly optimistic number.
-That's the first thing a proper solvability check needs to account for.
+crystal and one cell of a 7-cell cluster; both are permanently undrainable in
+practice, shrinking that cluster's *real* contribution from 7 to 6. The level
+stays winnable regardless — raw top 4 clusters are 8+7+7+6 = 28 of 140 (20%);
+corrected for the drain, 8+7+6+6 = 27 of 140 (19%), still well clear of the
+15% goal — but this was checked by hand, not by the test, which still
+reports the raw, slightly optimistic number. That's the first thing a proper
+solvability check needs to account for.
 
 ## Decisions so far
 

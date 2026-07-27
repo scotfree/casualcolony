@@ -14,6 +14,11 @@
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
+// Crystal, red crystal and green crystal all activate each other — only the
+// *axis* differs per color, not who counts as a valid neighbour. A plain
+// crystal next to a red one lights it just like it would another crystal.
+const CRYSTAL_TYPES = new Set(["crystal", "redCrystal", "greenCrystal"]);
+
 export const BUILDINGS = {
   desert: {
     id: "desert",
@@ -33,10 +38,11 @@ export const BUILDINGS = {
     lit: "#5eead4",
     glow: "#2dd4bf",
 
-    // Activating a crystal activates every orthogonally adjacent crystal.
-    // Applied repeatedly by the cascade, this floods the whole connected group.
+    // Activating a crystal activates every orthogonally adjacent crystal,
+    // red crystal, or green crystal. Applied repeatedly by the cascade,
+    // this floods the whole connected group regardless of color.
     propagate(world, cell) {
-      return orthogonalNeighbours(world, cell).filter((n) => n.type === "crystal");
+      return orthogonalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
     },
   },
 
@@ -52,7 +58,7 @@ export const BUILDINGS = {
 
     // Same as crystal, but only floods along the north/south axis.
     propagate(world, cell) {
-      return verticalNeighbours(world, cell).filter((n) => n.type === "redCrystal");
+      return verticalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
     },
   },
 
@@ -60,15 +66,15 @@ export const BUILDINGS = {
     id: "greenCrystal",
     name: "Green Crystal",
     inert: false,
-    fill: "#1f2c22",
-    stroke: "#2f4736",
-    dormant: "#3d6b4a",
-    lit: "#4ade80",
-    glow: "#22c55e",
+    fill: "#1e2416",
+    stroke: "#333d22",
+    dormant: "#4d5c26",
+    lit: "#a3e635",
+    glow: "#84cc16",
 
     // Same as crystal, but only floods along the east/west axis.
     propagate(world, cell) {
-      return horizontalNeighbours(world, cell).filter((n) => n.type === "greenCrystal");
+      return horizontalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
     },
   },
 

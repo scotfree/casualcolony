@@ -189,9 +189,32 @@ test("green crystal only propagates east/west", () => {
   assertEqual(litSet(world, cellAt(world, 0, 1)), ["0,1", "1,1", "2,1"], "horizontal chain only");
 });
 
-test("red and green crystals don't propagate into each other", () => {
+test("red doesn't reach a horizontally-adjacent neighbour — wrong axis, not wrong color", () => {
   const world = build(["RG"]);
-  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "different colors don't mix");
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "red only checks north/south");
+});
+
+test("plain crystal activates adjacent red and green crystals regardless of color", () => {
+  const world = build([
+    ".R.",
+    "GCG",
+    ".R.",
+  ]);
+  assertEqual(
+    litSet(world, cellAt(world, 1, 1)),
+    ["0,1", "1,0", "1,1", "1,2", "2,1"],
+    "crystal's own axis is all 4 directions, and color doesn't gate it"
+  );
+});
+
+test("red crystal activates a green crystal directly north/south of it", () => {
+  const world = build([
+    "R",
+    "G",
+  ]);
+  // Reachability follows the *source's* axis (red: vertical), not whether
+  // the target's own preferred axis would agree.
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "0,1"], "red's vertical axis reaches green");
 });
 
 // --- Drain --------------------------------------------------------------
@@ -397,21 +420,43 @@ test("parses valid energyBudget and completionGoal", () => {
 
 const summary = document.getElementById("summary");
 
+// Connected components across every activatable cell (crystal, red, green —
+// anything with a propagate rule), each following its own propagate. Crystal
+// and its color variants now activate each other across types, so this is
+// the only accurate way to find real cluster sizes; a per-type walk would
+// undercount. Pure: doesn't touch activateAt.
+function findComponents(world) {
+  const seen = new Set();
+  const components = [];
+  for (const cell of world.cells) {
+    if (buildingFor(cell).inert || seen.has(cell)) continue;
+    const component = [cell];
+    const stack = [cell];
+    seen.add(cell);
+    while (stack.length > 0) {
+      const current = stack.pop();
+      const building = buildingFor(current);
+      if (!building.propagate) continue;
+      for (const neighbour of building.propagate(world, current)) {
+        if (seen.has(neighbour)) continue;
+        seen.add(neighbour);
+        stack.push(neighbour);
+        component.push(neighbour);
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+
 fetch("./levels/random-crystal-forest.json")
   .then((response) => response.json())
   .then((data) => {
     const world = parseLevel(data);
     const crystals = world.cells.filter((c) => c.type === "crystal");
-
-    // Walk every cluster once and check none of them spans the board, which
-    // would mean one tap lights nearly everything.
-    let biggest = 0;
-    for (const cell of world.cells) {
-      if (cell.type !== "crystal" || cell.activateAt !== null) continue;
-      const cascade = computeCascade(world, cell);
-      for (const { cell: c } of cascade) c.activateAt = 0;
-      biggest = Math.max(biggest, cascade.length);
-    }
+    const components = findComponents(world);
+    const activatable = components.reduce((sum, c) => sum + c.length, 0);
+    const biggest = Math.max(...components.map((c) => c.length));
 
     test("shipped level: density is near half", () => {
       const density = crystals.length / world.cells.length;
@@ -419,36 +464,15 @@ fetch("./levels/random-crystal-forest.json")
     });
 
     test("shipped level: no cluster dominates the board", () => {
-      const share = biggest / crystals.length;
-      assert(share < 0.35, `biggest cluster was ${biggest} of ${crystals.length}`);
+      // Checked against every activatable cell, not just plain crystals —
+      // clusters now merge across colors, so that's the real denominator.
+      const share = biggest / activatable;
+      assert(share < 0.35, `biggest cluster was ${biggest} of ${activatable} activatable cells`);
     });
 
     test("shipped level: completion goal is reachable within the energy budget", () => {
-      // Connected components across every activatable type (crystal, red, green),
-      // each using its own propagate rule. Doesn't touch activateAt, so it's
-      // independent of the mutation the cluster-dominance test above performs.
-      const seen = new Set();
-      const components = [];
-      for (const cell of world.cells) {
-        if (buildingFor(cell).inert || seen.has(cell)) continue;
-        const stack = [cell];
-        seen.add(cell);
-        let size = 0;
-        while (stack.length > 0) {
-          const current = stack.pop();
-          size++;
-          const building = buildingFor(current);
-          if (!building.propagate) continue;
-          for (const neighbour of building.propagate(world, current)) {
-            if (seen.has(neighbour)) continue;
-            seen.add(neighbour);
-            stack.push(neighbour);
-          }
-        }
-        components.push(size);
-      }
-      components.sort((a, b) => b - a);
-      const reachable = components.slice(0, world.energyBudget).reduce((sum, n) => sum + n, 0);
+      const sizes = components.map((c) => c.length).sort((a, b) => b - a);
+      const reachable = sizes.slice(0, world.energyBudget).reduce((sum, n) => sum + n, 0);
       const fraction = reachable / world.cells.length;
       assert(
         fraction >= world.completionGoal,
