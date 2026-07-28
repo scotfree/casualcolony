@@ -409,6 +409,92 @@ into `loadLevelByRecord`, which always re-`parseLevel`s rather than reusing
 the in-memory `world` — a freshly saved level should never carry over stale
 per-cell animation state from the session that created it.
 
+## Milestone 6 — Colony economy: residential, farms, and mines
+
+Up through Milestone 5 every building was part of one system: the crystal
+signal network, activated by cascades and gated by a strictly-draining energy
+budget. This milestone adds a second system alongside it — a small colony
+economy — without touching the first. **Residential** houses population,
+**farm** grows food capacity, and **mine** converts a fed population into
+energy income. None of the three propagate; each only ever activates itself
+(the same single-cell activation an isolated crystal gets from a tap), so
+they never interact with cascades or attenuation. `colony.js`'s
+`resolveColony(world)` counts them fresh from board state — population, food
+capacity, and mining income are all *derived*, the same way `updateOutcome`
+already derived the activated fraction, rather than separately-tracked
+counters that could drift from what's actually on the board.
+
+**Resolved on every tap, not on a clock.** There's no notion of time besides
+taps in this game, so the colony doesn't need its own tick — `applyColonyTick`
+(`game.js`) runs `resolveColony` and applies its `energyDelta` to
+`world.energy` after every successful tap, the same beat cascades and drains
+already resolve on. A fed colony (`population <= foodCapacity`) earns
+`mineYield` energy per activated mine; an unfed one bleeds `starvationPenalty`
+energy per person over capacity. Three level knobs — `foodPerFarm`,
+`mineYield`, `starvationPenalty` — join `attenuation` and `powerPlantBoost` as
+optional, validated, non-negative numbers on the level file, defaulting to 1,
+2, and 1 respectively.
+
+**Culling is free and always available — the one exception to "everything
+costs 1 energy."** Residential is the only `toggle: true` building: tapping
+an already-active one deactivates it instead of no-opping. That's the
+player's tool for fixing a starving colony themselves, rather than the game
+picking who starves — directly answering the design question of what a
+player is avoiding by managing population by hand. It was built ungated and
+free (not costing energy, not blocked by the `energy <= 0` input gate that
+stops every other action) after a hand-simulated adversarial sequence — build
+farms, then overbuild residential past food capacity on the very tap that
+also spends the last energy — showed that a *paid, gated* cull could lock a
+starving colony permanently: the only fix would itself require the energy the
+colony no longer has, and be blocked by the same zero-energy gate meant to
+end the run. A hard, unrecoverable lock like that is functionally a forced
+loss, which contradicts the whole point of "lose worker pool, not the game."
+Because a free cull can pull energy back above 0, `applyColonyTick` also
+clears `outcome` when that happens — `outcome` is otherwise permanent once
+set (Milestone 2), which would otherwise leave a stale "Out of energy" screen
+stuck on top of a colony that had actually recovered.
+
+**Mining income breaks the one invariant the outcome screen relied on.**
+Milestone 2 defined game over as "energy hits 0" — true by construction back
+then, since every tap only ever *spent* energy. Mining breaks that: a fed
+colony's income can outpace what taps cost, so energy can climb instead of
+draining to 0. Playing the "recolonized" level's intended sequence in the
+browser confirmed this wasn't hypothetical — after farms, residential, mines,
+and the power plant were all up and the colony was earning more than it
+spent, the completion goal was already met but no outcome screen ever
+appeared, because energy stayed positive with nothing left to productively
+tap. `updateOutcome` now has a second path to a decision: `hasProductiveMove`
+(`game.js`) scans for any inactive cell that would still do something if
+tapped — light a cascade, or clear something as a drain — and the outcome
+resolves once energy hits 0 *or* the board is exhausted, whichever comes
+first. Deliberately ignores the free residential toggle: a cullable tile
+shouldn't keep a run "in progress" forever just because culling is always
+technically available. The check runs once per tap (cached in
+`boardExhausted`), not every animation frame, matching the rest of the
+codebase's rule that state only ever changes in direct response to a tap.
+
+**The "recolonized" level exercises the whole loop end to end.** An 8×10
+board: 4 residential (3 fit `foodPerFarm: 1` × 3 farms exactly — the 4th is a
+deliberate trap, built to make overbuilding and culling relevant to a player
+who taps all four), 3 farms, 3 mines, one power plant feeding an 8-cell
+crystal ring with a hole in it, `energyBudget: 8`, `completionGoal: 0.2`.
+Hand-simulated and then browser-verified: farms → residential → mines in that
+order keeps the colony fed throughout (mining income arrives before the
+budget would otherwise run out), tapping the trap residential drops the HUD's
+population/food readout into red and visibly drains energy, culling it is
+free and immediately restores the teal "fed" state and resumes mining income,
+and — now that `hasProductiveMove` exists — finishing off every remaining
+cell (including re-tapping the trap tile one last time) reaches "You win"
+with energy still well above 0, confirming the board-exhaustion path is what
+actually closes out a self-sustaining colony run.
+
+**Consequence for level design:** a level with mining no longer needs to
+spend its `energyBudget` down to 0 to end — it ends when nothing productive
+remains to tap, which for a well-fed colony can happen with a large energy
+surplus still on the HUD. `energyBudget` on a colony level is better read as
+"how much runway to survive an early mistake," not "how many total taps this
+run gets."
+
 ## Decisions so far
 
 | Decision | Why |
@@ -427,13 +513,18 @@ per-cell animation state from the session that created it.
 | Levels ship as one JSON array, not one file each | The game can offer a list to pick from without a separate index file to keep in sync |
 | Saved levels live in localStorage, keyed by name, shadowing shipped names | The only persistence a static site can have without a backend; matches "save as current" being "save as [this name]" |
 | `serializeLevel` reuses the level's existing legend rather than inventing characters | Editing can only introduce types already in the legend, so the legend never needs to change |
+| Colony economy (population/food/mining) is derived from board state every tap, not tracked as counters | Same "derive, don't track" shape as the activated fraction; can't drift from what's actually on the board |
+| Residential culling is free and ungated, the one exception to "everything costs 1 energy" | A paid or gated cull can permanently lock a starving colony that ran out of energy on the same tap that starved it |
+| Outcome resolves on board exhaustion as well as energy hitting 0 | Mining income can make energy climb instead of drain, so "energy hits 0" alone can never trigger for a self-sustaining colony |
 
 ## Open questions
 
 - How is control measured — active cell count, or something spatial? *(Now:
   fraction of all cells activated, checked once at game over. Spatial /
   contiguous-territory measures are still open.)*
-- Do buildings ever deactivate?
+- Do buildings ever deactivate? *(Now: yes, but only residential, and only by
+  the player's own free choice — see Milestone 6. Nothing deactivates
+  automatically or as a side effect of another building.)*
 - Are levels hand-authored, or generated offline and then curated? *(The
   editor makes hand-authoring interactive — still no offline generation.)*
 - Does the player ever *place* buildings, or only activate what's there?
@@ -455,3 +546,8 @@ per-cell animation state from the session that created it.
 - Building placement as a *gameplay* mechanic (spent from the energy budget,
   part of a run) — the level editor added authoring-time placement, which is
   a different thing: it happens outside a run and costs nothing
+- Jobs beyond mining — sensor towers (fog of war), defense against dangers —
+  and fog of war itself. Milestone 6 built the colony economy's population/
+  food/energy loop generally enough for more job types to opt in later the
+  same way mine did (a capability flag in `buildings.js`), but only mining
+  exists so far

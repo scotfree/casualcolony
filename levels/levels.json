@@ -31,5 +31,37 @@
       ".....C....",
       "C.CCC.CCC."
     ]
+  },
+  {
+    "name": "recolonized",
+    "size": {
+      "width": 8,
+      "height": 10
+    },
+    "energyBudget": 8,
+    "completionGoal": 0.2,
+    "foodPerFarm": 1,
+    "mineYield": 2,
+    "starvationPenalty": 1,
+    "legend": {
+      ".": "desert",
+      "C": "crystal",
+      "P": "powerPlant",
+      "H": "residential",
+      "F": "farm",
+      "M": "mine"
+    },
+    "grid": [
+      "..HHHH..",
+      "..FFF...",
+      "..MMM...",
+      "........",
+      "..P.....",
+      ".CCC....",
+      ".C.C....",
+      ".CCC....",
+      "........",
+      "........"
+    ]
   }
 ]

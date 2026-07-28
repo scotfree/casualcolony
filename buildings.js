@@ -17,6 +17,17 @@
 // signal attenuates on its way to the next cell. Omit it for buildings that
 // don't amplify — see cascade.js. Boost lives on the level, not a hardcoded
 // number here, so different levels can tune it without a new building type.
+//
+// houses/feeds/mines are capability flags for the colony economy (see
+// colony.js): an activated houses building counts toward population, feeds
+// toward food capacity, mines toward energy income when the colony is fed.
+// None of these buildings propagate — the colony economy isn't part of the
+// crystal signal network, it's a separate system resolved every tap.
+//
+// toggle: true means tapping an already-activated cell of this type
+// deactivates it instead of no-opping — see game.js. Residential is the
+// only one: it's how a player fixes a starving colony themselves, rather
+// than the game picking who starves.
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
@@ -101,6 +112,45 @@ export const BUILDINGS = {
     propagate(world, cell) {
       return orthogonalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
     },
+  },
+
+  residential: {
+    id: "residential",
+    name: "Residential",
+    inert: false,
+    fill: "#16202c",
+    stroke: "#254056",
+    dormant: "#3d5f78",
+    lit: "#38bdf8",
+    glow: "#0ea5e9",
+    houses: true,
+    toggle: true,
+    // No propagate: activating one only ever lights that single cell. The
+    // colony isn't part of the crystal signal network.
+  },
+
+  farm: {
+    id: "farm",
+    name: "Farm",
+    inert: false,
+    fill: "#241c14",
+    stroke: "#4a3620",
+    dormant: "#7a5a35",
+    lit: "#fb923c",
+    glow: "#f97316",
+    feeds: true,
+  },
+
+  mine: {
+    id: "mine",
+    name: "Mine",
+    inert: false,
+    fill: "#1c2024",
+    stroke: "#3a424a",
+    dormant: "#5c6773",
+    lit: "#cbd5e1",
+    glow: "#94a3b8",
+    mines: true,
   },
 
   drain: {

@@ -4,10 +4,11 @@
 import { loadLevelSet, parseLevel, serializeLevel } from "./level.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
+import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -33,6 +34,14 @@ let editMode = false;
 // localStorage, merged by name (a saved name shadows a shipped one with the
 // same name). Raw records, not parsed worlds — see loadLevelByRecord.
 let levelList = [];
+
+// Whether any remaining tap could still change the board — recomputed after
+// every successful tap (see applyColonyTick), not every frame, since taps
+// are the only thing that ever changes it. Mining income means energy can
+// climb instead of only draining toward the old "game over at 0" trigger
+// (see updateOutcome), so a colony level needs a second way to end: running
+// out of anything left to productively tap.
+let boardExhausted = false;
 
 // Board geometry, recomputed on resize.
 let width = 0;
@@ -99,6 +108,21 @@ function hitsButton(button, clientX, clientY) {
   return x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h;
 }
 
+// Resolves the colony economy against the board's current state and applies
+// it — called after every successful tap (see pointerdown below), which is
+// this game's only notion of a tick. Clamped at 0: a starving colony can't
+// go anywhere energy running out doesn't already take it.
+//
+// A free cull (see the toggle branch below) can run even at 0 energy and
+// pull it back above 0 by fixing "fed" status — if that happens, the run
+// isn't over after all, so clear any outcome already reached for it.
+function applyColonyTick() {
+  const { energyDelta } = resolveColony(world);
+  world.energy = Math.max(0, world.energy + energyDelta);
+  if (world.energy > 0) outcome = null;
+  boardExhausted = !hasProductiveMove(world);
+}
+
 // Makes `record` the level actually being played: parses it fresh (so its
 // cells' mutable state starts clean, never reused from whatever was loaded
 // before) and leaves edit mode, since loading a level and editing the
@@ -106,6 +130,7 @@ function hitsButton(button, clientX, clientY) {
 function loadLevelByRecord(record) {
   world = parseLevel(record);
   outcome = null;
+  boardExhausted = false;
   editMode = false;
   resize();
 }
@@ -262,16 +287,29 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
+  const building = buildingFor(cell);
+
+  // Tapping an already-active toggle building (residential) deactivates it
+  // instead of no-opping — the player's tool for fixing a starving colony.
+  // Free, and allowed even at 0 energy: the whole point is to recover from
+  // starvation, and a cull that itself cost energy (or was blocked by the
+  // very energy shortage it fixes) couldn't always do that.
+  if (cell.activateAt !== null && building.toggle) {
+    cell.activateAt = null;
+    applyColonyTick();
+    return;
+  }
+
   // No taps once the budget is spent — the run is over, win or lose.
   if (world.energy <= 0) return;
 
-  const building = buildingFor(cell);
   if (building.drain) {
     const drained = building.drain(world, cell);
     if (drained.length === 0) return; // nothing to drain, so no energy spent
     for (const target of drained) target.activateAt = null;
     world.energy -= 1;
     cell.drainedAt = performance.now(); // brief self-pulse, see drawCell
+    applyColonyTick();
     return;
   }
 
@@ -293,6 +331,7 @@ canvas.addEventListener("pointerdown", (event) => {
     for (const target of targets) target.activateAt = null;
     sink.drainedAt = now;
   }
+  applyColonyTick();
 });
 
 // --- Rendering --------------------------------------------------------------
@@ -325,11 +364,30 @@ function drawDiamond(cx, cy, gem) {
   ctx.fill();
 }
 
-// Settles the win/lose outcome once energy is spent and every scheduled
-// cascade has finished animating — not the instant energy hits zero, so the
-// last ripple still gets to play out.
+// Whether any inactive cell would still do something if tapped: light a
+// cascade, or clear something as a drain. Ignores residential's free toggle
+// cull — it's reversible and costs nothing, so its mere availability
+// shouldn't keep a run "in progress" forever.
+function hasProductiveMove(world) {
+  for (const cell of world.cells) {
+    if (cell.activateAt !== null) continue;
+    const building = buildingFor(cell);
+    if (building.drain) {
+      if (building.drain(world, cell).length > 0) return true;
+    } else if (computeCascade(world, cell).length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Settles the win/lose outcome once the board can't change any further —
+// energy ran out, or the board is exhausted (see boardExhausted) — and every
+// scheduled cascade has finished animating, so the last ripple still gets to
+// play out before the outcome screen appears.
 function updateOutcome(now) {
-  if (!world || outcome || world.energy > 0) return;
+  if (!world || outcome) return;
+  if (world.energy > 0 && !boardExhausted) return;
   for (const cell of world.cells) {
     if (cell.activateAt !== null && now < cell.activateAt + LIGHT_TIME) return;
   }
@@ -399,6 +457,14 @@ function drawHud() {
   const active = world.cells.filter((cell) => cell.activateAt !== null).length;
   const total = world.cells.length;
 
+  // Only shown for levels that actually use the colony economy — no reason
+  // to clutter "0/0" onto a level with no residential or farm tiles at all.
+  const hasColony = world.cells.some((cell) => {
+    const b = buildingFor(cell);
+    return b.houses || b.feeds || b.mines;
+  });
+  const colony = hasColony ? resolveColony(world) : null;
+
   // Two rows: name + reset on top, activation/energy stats below. A single
   // row overlapped the name with the stats on narrow phones.
   const row1 = HUD_HEIGHT * 0.36;
@@ -410,9 +476,13 @@ function drawHud() {
   ctx.font = "13px ui-monospace, monospace";
   ctx.fillText(world.name, 14, row1);
 
-  ctx.fillStyle = "#5eead4";
+  let statsText = `${active} / ${total} activated   ⚡ ${world.energy}`;
+  if (colony) statsText += `   👥 ${colony.population}/${colony.foodCapacity}`;
+  // The whole line goes warning-red when the colony is starving — simpler
+  // and just as legible as splitting it into separately-colored segments.
+  ctx.fillStyle = colony && !colony.fed ? "#f87171" : "#5eead4";
   ctx.textAlign = "center";
-  ctx.fillText(`${active} / ${total} activated   ⚡ ${world.energy}`, width / 2, row2);
+  ctx.fillText(statsText, width / 2, row2);
 
   ctx.textAlign = "right";
 

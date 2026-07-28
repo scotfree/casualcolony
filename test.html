@@ -22,6 +22,7 @@
 <script type="module">
 import { parseLevel, loadLevelSet, serializeLevel } from "./level.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
+import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
@@ -76,7 +77,10 @@ function build(rows, extra = {}) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
-    legend: { ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal", "D": "drain", "P": "powerPlant" },
+    legend: {
+      ".": "desert", "C": "crystal", "R": "redCrystal", "G": "greenCrystal", "D": "drain",
+      "P": "powerPlant", "H": "residential", "F": "farm", "M": "mine",
+    },
     grid: rows,
     energyBudget: 99,
     completionGoal: 1,
@@ -295,6 +299,65 @@ test("powerPlantBoost is configurable per level, like attenuation", () => {
   // which then has nothing left to pass on (1-1=0) — the chain barely moves.
   const world = build(["PCCCCCC"], { powerPlantBoost: 1 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0"], "weaker boost, shorter reach");
+});
+
+// --- Colony (residential/farm/mine) ------------------------------------------
+
+test("residential and farm don't propagate — activating one lights only itself", () => {
+  const world = build(["HHH"], { attenuation: 0 }); // even with unlimited signal
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "no propagate, no spread");
+});
+
+test("resolveColony on an empty board: fed trivially, no income", () => {
+  const world = build(["..."]);
+  assertEqual(resolveColony(world), { population: 0, foodCapacity: 0, fed: true, energyDelta: 0 }, "0 <= 0 is fed");
+});
+
+test("resolveColony counts only activated houses/farms/mines", () => {
+  const world = build(["HHFM"]);
+  // Nothing tapped yet — none of it counts.
+  assertEqual(resolveColony(world).population, 0, "population starts at 0");
+  for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
+    cell.activateAt = 0;
+  }
+  const colony = resolveColony(world);
+  assertEqual(colony.population, 2, "2 activated residential");
+  assertEqual(colony.foodCapacity, 1, "1 activated farm x foodPerFarm(1)");
+  assertEqual(colony.fed, false, "2 population > 1 food capacity");
+});
+
+test("a fed colony earns energy from every activated mine", () => {
+  const world = build(["HFMM"], { mineYield: 3 });
+  for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
+    cell.activateAt = 0;
+  }
+  const colony = resolveColony(world);
+  assertEqual(colony.fed, true, "1 population <= 1 food capacity");
+  assertEqual(colony.energyDelta, 6, "2 mines x mineYield(3)");
+});
+
+test("an unfed colony bleeds energy proportional to the shortfall, and earns nothing", () => {
+  const world = build(["HHHFM"], { starvationPenalty: 2, mineYield: 10 });
+  for (const cell of [
+    cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), // 3 residential
+    cellAt(world, 3, 0), // 1 farm
+    cellAt(world, 4, 0), // 1 mine, but colony is unfed
+  ]) {
+    cell.activateAt = 0;
+  }
+  const colony = resolveColony(world);
+  assertEqual(colony.fed, false, "3 population > 1 food capacity");
+  assertEqual(colony.energyDelta, -4, "2 unfed workers x starvationPenalty(2), mine ignored while unfed");
+});
+
+test("foodPerFarm scales how much one farm feeds", () => {
+  const world = build(["HHHF"], { foodPerFarm: 3 });
+  for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
+    cell.activateAt = 0;
+  }
+  const colony = resolveColony(world);
+  assertEqual(colony.foodCapacity, 3, "1 farm x foodPerFarm(3)");
+  assertEqual(colony.fed, true, "3 population <= 3 food capacity");
 });
 
 // --- Drain --------------------------------------------------------------
@@ -516,6 +579,53 @@ test("parses a custom powerPlantBoost", () => {
   assertEqual(world.powerPlantBoost, 12, "custom boost");
 });
 
+test("colony knobs default sensibly when omitted", () => {
+  const world = build(["C."]);
+  assertEqual(world.foodPerFarm, 1, "default foodPerFarm");
+  assertEqual(world.mineYield, 2, "default mineYield");
+  assertEqual(world.starvationPenalty, 1, "default starvationPenalty");
+});
+
+test("rejects a negative foodPerFarm", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 0.5,
+    foodPerFarm: -1,
+  }), "foodPerFarm must be a non-negative number");
+});
+
+test("rejects a negative mineYield", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 0.5,
+    mineYield: -1,
+  }), "mineYield must be a non-negative number");
+});
+
+test("rejects a negative starvationPenalty", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 0.5,
+    starvationPenalty: -1,
+  }), "starvationPenalty must be a non-negative number");
+});
+
+test("parses custom colony knobs", () => {
+  const world = build(["C."], { foodPerFarm: 4, mineYield: 7, starvationPenalty: 3 });
+  assertEqual(world.foodPerFarm, 4, "custom foodPerFarm");
+  assertEqual(world.mineYield, 7, "custom mineYield");
+  assertEqual(world.starvationPenalty, 3, "custom starvationPenalty");
+});
+
 // --- Level serialization (the editor's save path) ----------------------------
 
 test("serializeLevel round-trips an edited board", () => {
@@ -535,12 +645,18 @@ test("serializeLevel carries level parameters through unchanged", () => {
     completionGoal: 0.3,
     attenuation: 2,
     powerPlantBoost: 9,
+    foodPerFarm: 4,
+    mineYield: 7,
+    starvationPenalty: 3,
   });
   const record = serializeLevel(world, "params");
   assertEqual(record.energyBudget, 7, "energyBudget");
   assertEqual(record.completionGoal, 0.3, "completionGoal");
   assertEqual(record.attenuation, 2, "attenuation");
   assertEqual(record.powerPlantBoost, 9, "powerPlantBoost");
+  assertEqual(record.foodPerFarm, 4, "foodPerFarm");
+  assertEqual(record.mineYield, 7, "mineYield");
+  assertEqual(record.starvationPenalty, 3, "starvationPenalty");
 });
 
 // --- Saved-level storage (localStorage, real in this browser) ---------------
@@ -646,6 +762,69 @@ const summary = document.getElementById("summary");
         `power plant + one more tap reaches ${(fraction * 100).toFixed(1)}%, ` +
         `need ${(sim.completionGoal * 100).toFixed(1)}%`
       );
+    });
+
+    test("levels.json contains recolonized", () => {
+      assert(rawLevels.some((r) => r.name === "recolonized"), "has the recolonized level");
+    });
+
+    const recoData = rawLevels.find((r) => r.name === "recolonized");
+
+    test("recolonized: completion goal is reachable via the colony loop", () => {
+      // Constructive check, mirroring the one above, but exercising the
+      // colony economy: farms before residential before mines (food has to
+      // exist before the population it feeds), then the power plant once
+      // mining income is flowing to pay for it. Resolves the colony after
+      // every tap, exactly like game.js's applyColonyTick.
+      const sim = parseLevel(recoData);
+      let energy = sim.energyBudget;
+      let activated = 0;
+
+      function tap(x, y) {
+        if (energy <= 0) return;
+        const cascade = computeCascade(sim, cellAt(sim, x, y));
+        if (cascade.length === 0) return;
+        for (const { cell } of cascade) cell.activateAt = 0;
+        energy -= 1;
+        activated += cascade.length;
+        const { energyDelta } = resolveColony(sim);
+        energy = Math.max(0, energy + energyDelta);
+      }
+
+      tap(2, 1); tap(3, 1); tap(4, 1); // 3 farms
+      tap(2, 0); tap(3, 0); tap(4, 0); // 3 residential — (5,0)'s 4th is a trap, left untapped
+      tap(2, 2); tap(3, 2); tap(4, 2); // 3 mines, fed and earning by the time each lands
+      tap(2, 4); // the power plant, funded by mining income at this point
+
+      const fraction = activated / sim.cells.length;
+      assert(
+        fraction >= sim.completionGoal,
+        `colony + power plant reaches ${(fraction * 100).toFixed(1)}%, ` +
+        `need ${(sim.completionGoal * 100).toFixed(1)}%`
+      );
+      assert(energy > 0, `should still have energy to spare (had ${energy})`);
+    });
+
+    test("recolonized: overbuilding residential without enough farms starves the colony", () => {
+      const sim = parseLevel(recoData);
+      cellAt(sim, 2, 0).activateAt = 0; // one residential, zero farms
+      const colony = resolveColony(sim);
+      assert(!colony.fed, "1 population with 0 food capacity is unfed");
+      assert(colony.energyDelta < 0, "an unfed colony bleeds energy");
+    });
+
+    test("recolonized: culling an unfed residential is free and fixes it", () => {
+      const sim = parseLevel(recoData);
+      let energy = sim.energyBudget - 1; // as if just tapped
+      cellAt(sim, 2, 0).activateAt = 0; // one residential, zero farms — unfed
+      energy = Math.max(0, energy + resolveColony(sim).energyDelta);
+      const afterOverbuild = energy;
+
+      cellAt(sim, 2, 0).activateAt = null; // the free cull, see game.js
+      energy = Math.max(0, energy + resolveColony(sim).energyDelta);
+
+      assertEqual(energy, afterOverbuild, "culling itself costs nothing");
+      assertEqual(resolveColony(sim).fed, true, "colony is fed again with 0 population");
     });
   } catch (error) {
     failed++;

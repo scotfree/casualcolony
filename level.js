@@ -21,7 +21,10 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid, energyBudget, completionGoal, attenuation, powerPlantBoost } = data;
+  const {
+    name, size, legend, grid, energyBudget, completionGoal, attenuation, powerPlantBoost,
+    foodPerFarm, mineYield, starvationPenalty,
+  } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -95,6 +98,20 @@ export function parseLevel(data) {
   if (typeof resolvedPowerPlantBoost !== "number" || resolvedPowerPlantBoost < 0) {
     throw new Error("Level's powerPlantBoost must be a non-negative number");
   }
+  // Optional, same reasoning again: the colony economy's three knobs. See
+  // colony.js for how they combine.
+  const resolvedFoodPerFarm = foodPerFarm === undefined ? 1 : foodPerFarm;
+  if (typeof resolvedFoodPerFarm !== "number" || resolvedFoodPerFarm < 0) {
+    throw new Error("Level's foodPerFarm must be a non-negative number");
+  }
+  const resolvedMineYield = mineYield === undefined ? 2 : mineYield;
+  if (typeof resolvedMineYield !== "number" || resolvedMineYield < 0) {
+    throw new Error("Level's mineYield must be a non-negative number");
+  }
+  const resolvedStarvationPenalty = starvationPenalty === undefined ? 1 : starvationPenalty;
+  if (typeof resolvedStarvationPenalty !== "number" || resolvedStarvationPenalty < 0) {
+    throw new Error("Level's starvationPenalty must be a non-negative number");
+  }
 
   return {
     name: name || "Untitled",
@@ -108,6 +125,9 @@ export function parseLevel(data) {
     completionGoal,
     attenuation: resolvedAttenuation,
     powerPlantBoost: resolvedPowerPlantBoost,
+    foodPerFarm: resolvedFoodPerFarm,
+    mineYield: resolvedMineYield,
+    starvationPenalty: resolvedStarvationPenalty,
     // Mutable: energy spent tapping cells. Reset to energyBudget to replay.
     energy: energyBudget,
   };
@@ -141,8 +161,9 @@ export async function loadLevelSet(url) {
 // type edited in place by the level editor) back into a plain JSON-shaped
 // level record under the given name. Only tile types can differ from the
 // record this world was parsed from — energyBudget, completionGoal,
-// attenuation and powerPlantBoost are carried through unchanged, since
-// editing never touches them.
+// attenuation, powerPlantBoost, foodPerFarm, mineYield and
+// starvationPenalty are carried through unchanged, since editing never
+// touches them.
 export function serializeLevel(world, name) {
   const charFor = {};
   for (const [char, typeId] of Object.entries(world.legend)) {
@@ -165,6 +186,9 @@ export function serializeLevel(world, name) {
     completionGoal: world.completionGoal,
     attenuation: world.attenuation,
     powerPlantBoost: world.powerPlantBoost,
+    foodPerFarm: world.foodPerFarm,
+    mineYield: world.mineYield,
+    starvationPenalty: world.starvationPenalty,
     legend: world.legend,
     grid,
   };
