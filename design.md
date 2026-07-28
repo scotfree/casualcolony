@@ -333,33 +333,38 @@ wrong guess or two.
 
 A toggle, next to reset in the HUD, that turns tapping-to-play into
 tapping-to-retype. In edit mode, tapping a cell opens a picker listing every
-building type in *this level's own legend* (not the whole `BUILDINGS` table —
-a level about crystals shouldn't offer you buildings it never declared), with
-the cell's current type highlighted. Picking a different one changes that
-cell on the spot. Toggling edit mode back off restarts the level in normal
-play — full energy, nothing activated — but keeps every edit made, so the
-point of editing is to then play the level you just changed, not just to
-preview it.
+building type, with the cell's current type highlighted. Picking a different
+one changes that cell on the spot. Toggling edit mode back off restarts the
+level in normal play — full energy, nothing activated — but keeps every edit
+made, so the point of editing is to then play the level you just changed, not
+just to preview it.
 
 **The picker is a plain DOM modal, not canvas UI.** Everything else in this
 game is canvas-drawn, but a list of clickable, labeled options with a
 selected state is exactly what HTML buttons already are — hand-rolling that
 in canvas would mean reimplementing hit-testing, focus, and text layout for
 no benefit. `index.html` gets a single `#modal` overlay (hidden by default,
-reused for the tile picker, the level picker, and the save-as-new name
-prompt — see Milestone 5) and `game.js` populates it with real `<button>`
-elements built from `BUILDINGS`, one per legend type, each showing a small
-color swatch (its `lit`, `icon`, or `fill`, whichever exists) next to its
-name. This is the first departure from "everything is canvas" in the whole
+reused for the tile picker, the level picker, the save-as-new name prompt —
+see Milestone 5 — and the legend popup — see Milestone 7) and `game.js`
+populates it with real `<button>` elements built from `BUILDINGS`, each
+showing a small color swatch (its `iconColor` or `fill`) next to its name.
+This is the first departure from "everything is canvas" in the whole
 project, and it's a narrow, deliberate one — the picker doesn't touch game
 state directly, it just calls back into the same `cell.type = ...`
 assignment editing would use regardless of how the UI were built.
 
-**Why the legend, not the full building table:** `parseLevel` now keeps the
-level's `legend` (character → type id) on the returned world object
-specifically so the editor has something scoped to ask. This also means the
-picker doubles as a legend viewer — if a level uses five types, editing shows
-exactly those five, in the order the level file declared them.
+**Originally scoped to the level's own legend; now the whole table.** The
+picker first only offered types already in *this level's* legend, on the
+theory that a level about crystals shouldn't offer buildings it never
+declared. That held up fine with five types on one level, but stopped
+working the moment most levels didn't declare the newer colony types at all
+(Milestone 6) — editing "simple test" couldn't add a residential even though
+residential is a perfectly normal building. The picker now always offers
+every type in `BUILDINGS`, and `ensureLegendChar` (`game.js`) grows the
+level's `legend` the first time a type new to it gets picked, assigning it
+the same character every other level already uses for that type where
+possible, so `serializeLevel` always has something to write that cell back
+out as.
 
 **What editing doesn't do:** touch `energyBudget`, `completionGoal`,
 `attenuation`, or `powerPlantBoost`. Only tile types change. Those four are
@@ -544,7 +549,7 @@ be asked for a glow color it doesn't have.
 | Signal attenuates per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
 | Boost lives in the level file, referenced from the building via `boostKey` | Same level-tunable status as attenuation, without `cascade.js` needing to know building ids by name |
 | Tile picker is a DOM modal, not canvas-drawn | Buttons with labels and a selected state are what HTML already does well; no reason to reimplement that in canvas |
-| Editor scoped to the level's own legend, and only edits tile types | Keeps the picker relevant per-level and keeps "layout change" separate from "rules change" (energy/goal/attenuation/boost) |
+| Editor offers every building type, and only edits tile types | Scoping to the level's own legend stopped working once most levels didn't declare the colony types (see Milestone 7); keeping edits to tile types only still keeps "layout change" separate from "rules change" (energy/goal/attenuation/boost) |
 | Levels ship as one JSON array, not one file each | The game can offer a list to pick from without a separate index file to keep in sync |
 | Saved levels live in localStorage, keyed by name, shadowing shipped names | The only persistence a static site can have without a backend; matches "save as current" being "save as [this name]" |
 | `serializeLevel` reuses the level's existing legend rather than inventing characters | Editing can only introduce types already in the legend, so the legend never needs to change |

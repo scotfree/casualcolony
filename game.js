@@ -162,25 +162,52 @@ function saveAsNew(name) {
 // --- Modal: tile picker, level picker, save-as-new prompt -------------------
 // A plain DOM overlay, not canvas-drawn — see style.css for why.
 
+// Every building type is offered, not just the ones this level's legend
+// already uses — the picker used to scope to the level's own legend, but
+// that meant a level authored before residential/farm/mine existed could
+// never gain one through the editor. ensureLegendChar (below) is what makes
+// picking a type new to this level actually stick.
 function openTilePicker(cell) {
   pickerCell = cell;
   modalPanel.innerHTML = "";
-  const types = [...new Set(Object.values(world.legend))];
-  for (const typeId of types) {
-    const building = BUILDINGS[typeId];
+  for (const building of Object.values(BUILDINGS)) {
     const button = document.createElement("button");
-    button.className = "option" + (typeId === cell.type ? " selected" : "");
+    button.className = "option" + (building.id === cell.type ? " selected" : "");
     const swatchColor = building.iconColor || building.fill;
     button.innerHTML =
       `<span class="swatch" style="background:${swatchColor}"></span>${building.name}`;
-    button.addEventListener("click", () => selectType(typeId));
+    button.addEventListener("click", () => selectType(building.id));
     modalPanel.appendChild(button);
   }
   modal.classList.remove("hidden");
 }
 
+// The character each building type is already known by across the shipped
+// levels — reused so a level that gains a type through the editor picks up
+// the same letter every other level would use for it, rather than an
+// arbitrary one.
+const PREFERRED_LEGEND_CHARS = {
+  desert: ".", crystal: "C", redCrystal: "R", greenCrystal: "G",
+  powerPlant: "P", drain: "D", residential: "H", farm: "F", mine: "M",
+};
+
+// serializeLevel writes a cell's type back out via world.legend, so picking
+// a type this level's legend has never seen before needs a character added
+// for it first — otherwise the saved grid would have nothing to write for
+// that cell. No-ops if the type already has one.
+function ensureLegendChar(world, typeId) {
+  if (Object.values(world.legend).includes(typeId)) return;
+  let char = PREFERRED_LEGEND_CHARS[typeId] || typeId[0].toUpperCase();
+  if (char in world.legend) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    char = [...alphabet].find((c) => !(c in world.legend));
+  }
+  world.legend[char] = typeId;
+}
+
 function selectType(typeId) {
   if (pickerCell) {
+    ensureLegendChar(world, typeId);
     pickerCell.type = typeId;
     pickerCell.activateAt = null;
     pickerCell.drainedAt = null;
