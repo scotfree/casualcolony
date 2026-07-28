@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Casual Colony — Player's Manual</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  /* ---------- Tokens ---------- */
+  :root {
+    --ink: #eef1f5;
+    --panel: #ffffff;
+    --panel-2: #e4e9ef;
+    --line: #c6d1db;
+    --text: #16212c;
+    --muted: #55697a;
+    --accent: #0f8f83;
+    --accent-warm: #a8570c;
+
+    /* Diagrams are fixed-dark schematic panels, like an actual screenshot of
+       the game, regardless of the surrounding page theme. */
+    --sc-ink: #0a0f16;
+    --sc-panel: #121a24;
+    --sc-panel-2: #182231;
+    --sc-line: #26374a;
+    --sc-text: #dbe6ee;
+    --sc-muted: #7e93a6;
+
+    /* Building palette. Fill/frame tones still echo the game's own tile
+       table (buildings.js); icon colors are this manual's own — chosen so
+       each type reads instantly by shape *and* color, constant regardless
+       of reading theme or activation state (see .tile-icon below). */
+    --b-desert-fill: #181e27;    --b-desert-line: #2a3340;
+    --b-crystal-fill: #1b2732;  --b-crystal-line: #35505f;  --b-crystal-active: #23414e;  --b-crystal-glow: #2dd4bf;  --b-crystal-icon: #f3f7fa;
+    --b-plant-fill: #2a2415;    --b-plant-line: #5b4c22;    --b-plant-active: #40341a;    --b-plant-glow: #f59e0b;    --b-plant-icon: #fbbf24;
+    --b-res-fill: #131f2c;      --b-res-line: #2c5170;      --b-res-active: #1c3245;      --b-res-glow: #0ea5e9;      --b-res-icon: #38bdf8;
+    --b-farm-fill: #131f16;     --b-farm-line: #29572f;     --b-farm-active: #1c3922;     --b-farm-glow: #22c55e;     --b-farm-icon: #4ade80;
+    --b-mine-fill: #24141a;     --b-mine-line: #5c2a34;     --b-mine-active: #3a1e26;     --b-mine-glow: #ef4444;     --b-mine-icon: #f87171;
+
+    --font-display: "Futura", "Century Gothic", "Avenir Next", "Segoe UI Semibold", "Segoe UI", sans-serif;
+    --font-body: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #0a0f16;
+      --panel: #121a24;
+      --panel-2: #182231;
+      --line: #26374a;
+      --text: #dbe6ee;
+      --muted: #7e93a6;
+      --accent: #5eead4;
+      --accent-warm: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #0a0f16; --panel: #121a24; --panel-2: #182231; --line: #26374a;
+    --text: #dbe6ee; --muted: #7e93a6; --accent: #5eead4; --accent-warm: #fbbf24;
+  }
+  :root[data-theme="light"] {
+    --ink: #eef1f5; --panel: #ffffff; --panel-2: #e4e9ef; --line: #c6d1db;
+    --text: #16212c; --muted: #55697a; --accent: #0f8f83; --accent-warm: #a8570c;
+  }
+
+  /* ---------- Reset-ish ---------- */
+  * { box-sizing: border-box; }
+  html { color-scheme: light dark; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 42px 42px;
+    background-position: center top;
+    background-attachment: fixed;
+    opacity: 1;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 900px 500px at 50% 0%, var(--ink) 55%, transparent 100%),
+                linear-gradient(var(--ink), var(--ink));
+    background-blend-mode: normal;
+    z-index: -1;
+    opacity: 0.94;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+  p { margin: 0 0 1em; }
+  .prose p:last-child { margin-bottom: 0; }
+  ul, ol { padding-left: 1.3em; }
+  li + li { margin-top: 0.55em; }
+
+  main {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 0 22px 90px;
+  }
+
+  /* ---------- Header ---------- */
+  header.masthead {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 56px 22px 30px;
+    text-align: center;
+  }
+  .kicker {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-bottom: 18px;
+  }
+  h1.title {
+    font-size: clamp(2.1rem, 6vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .title .gem-dot {
+    display: inline-block;
+    width: 0.62em; height: 0.62em;
+    line-height: 0.62em;
+    text-align: center;
+    color: var(--b-crystal-icon);
+    text-shadow: 0 0 14px var(--b-crystal-glow), 0 0 4px var(--b-crystal-glow);
+    margin: 0 0.02em;
+    vertical-align: -0.02em;
+    font-weight: 800;
+  }
+  .tagline {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 1.02rem;
+  }
+
+  nav.toc {
+    max-width: 700px;
+    margin: 0 auto 8px;
+    padding: 0 22px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 8px;
+  }
+  nav.toc a {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    color: var(--accent);
+    background: var(--panel);
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    padding: 7px 12px;
+    white-space: nowrap;
+  }
+  nav.toc a:hover { background: var(--accent); color: var(--panel); }
+  nav.toc .n { opacity: 0.75; margin-right: 0.4em; }
+
+  hr.rule {
+    border: none;
+    border-top: 1px solid var(--line);
+    max-width: 700px;
+    margin: 54px auto;
+  }
+
+  /* ---------- Sections ---------- */
+  section { padding-top: 8px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .eyebrow .num { color: var(--muted); }
+  h2.h {
+    font-size: clamp(1.5rem, 3.4vw, 1.85rem);
+    margin-bottom: 18px;
+  }
+  h3.h {
+    font-family: var(--font-display);
+    font-size: 1.12rem;
+    margin: 34px 0 12px;
+  }
+  .lede {
+    font-size: 1.14rem;
+    color: var(--text);
+  }
+
+  /* ---------- Panels / diagrams (fixed dark, like a real screenshot) ---------- */
+  .panel {
+    background: var(--sc-panel);
+    border: 1px solid var(--sc-line);
+    border-radius: 14px;
+    padding: 22px;
+    margin: 22px 0 26px;
+    color: var(--sc-text);
+    background-image:
+      linear-gradient(var(--sc-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--sc-line) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+    background-blend-mode: overlay;
+    opacity: 1;
+  }
+  .panel-inner { background: transparent; }
+  .panel-cap {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--sc-muted);
+    margin-bottom: 14px;
+  }
+  .panel-note {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--sc-muted);
+    margin-top: 14px;
+    line-height: 1.55;
+  }
+  .panel-note strong { color: var(--sc-text); font-weight: 600; }
+  .scroller { overflow-x: auto; }
+
+  /* ---------- Tile component ----------
+     Two independent visual channels, on purpose: the icon says *what* a
+     tile is (always full brightness, never dimmed, so type reads at a
+     glance even before it's tapped), and a frame + brightened ground says
+     *whether* it's active — the two things a player actually needs to
+     tell apart, kept from competing for the same signal. */
+  .tile {
+    position: relative;
+    container-type: inline-size;
+    aspect-ratio: 1 / 1;
+    border-radius: 22%;
+    background: var(--b-desert-fill);
+    border: 1.5px solid var(--b-desert-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .tile.active {
+    background: var(--active);
+    border-color: var(--glow);
+    border-width: 2px;
+    box-shadow: 0 0 0 1px var(--glow) inset, 0 0 11px 1px var(--glow);
+  }
+  .tile-icon {
+    width: 58%;
+    height: 58%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon);
+    line-height: 1;
+  }
+  .tile-icon svg { width: 100%; height: 100%; overflow: visible; }
+  .tile-icon.is-text { font-family: var(--font-mono); font-weight: 800; font-size: 48cqw; }
+  .tile-icon .leaf {
+    width: 62%;
+    height: 62%;
+    background: currentColor;
+    border-radius: 0% 100% 0% 100%;
+    transform: rotate(45deg);
+  }
+
+  .tile--crystal { --active: var(--b-crystal-active); --glow: var(--b-crystal-glow); --icon: var(--b-crystal-icon); background: var(--b-crystal-fill); border-color: var(--b-crystal-line); }
+  .tile--plant   { --active: var(--b-plant-active);   --glow: var(--b-plant-glow);   --icon: var(--b-plant-icon);   background: var(--b-plant-fill);   border-color: var(--b-plant-line); }
+  .tile--res     { --active: var(--b-res-active);     --glow: var(--b-res-glow);     --icon: var(--b-res-icon);     background: var(--b-res-fill);     border-color: var(--b-res-line); }
+  .tile--farm    { --active: var(--b-farm-active);    --glow: var(--b-farm-glow);    --icon: var(--b-farm-icon);    background: var(--b-farm-fill);    border-color: var(--b-farm-line); }
+  .tile--mine    { --active: var(--b-mine-active);    --glow: var(--b-mine-glow);    --icon: var(--b-mine-icon);    background: var(--b-mine-fill);    border-color: var(--b-mine-line); }
+
+  .tile[data-badge]::after {
+    content: attr(data-badge);
+    position: absolute;
+    top: -8px; right: -8px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent-badge, #5eead4);
+    color: #08131a;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 2px var(--sc-panel), 0 0 8px 0 var(--accent-badge, #5eead4);
+  }
+  .tile[data-badge="?"]::after { background: #fbbf24; box-shadow: 0 0 0 2px var(--sc-panel), 0 0 8px 0 #fbbf24; }
+
+  /* Board grid */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  /* Cascade chain diagram */
+  .chain {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 2px 8px;
+  }
+  .chain-step { flex: 0 0 auto; text-align: center; width: 58px; }
+  .chain-step .tile { width: 46px; margin: 0 auto; }
+  .chain-step .val {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--sc-muted);
+    margin-top: 6px;
+  }
+  .chain-arrow {
+    flex: 0 0 auto;
+    color: var(--sc-line);
+    font-size: 1.1rem;
+    transform: translateY(-8px);
+  }
+
+  /* Economy flow diagram */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px 6px;
+  }
+  .flow-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .flow-tiles { display: flex; gap: 6px; }
+  .flow-tiles .tile { width: 30px; }
+  .flow-label { font-family: var(--font-mono); font-size: 0.72rem; color: var(--sc-muted); text-align: center; }
+  .flow-arrow { color: var(--sc-line); font-size: 1.3rem; padding: 0 2px; }
+  .stat-box {
+    border: 1px solid var(--sc-line);
+    border-radius: 10px;
+    padding: 10px 16px;
+    text-align: center;
+    background: var(--sc-panel-2);
+  }
+  .stat-box .n { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; }
+  .stat-box .l { font-family: var(--font-mono); font-size: 0.68rem; color: var(--sc-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .branch { display: flex; flex-direction: column; gap: 8px; }
+  .outcome-pill {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    border-radius: 8px;
+    padding: 8px 12px;
+    border: 1px solid;
+  }
+  .outcome-pill.fed { color: #5eead4; border-color: #1f6d64; background: rgba(94,234,212,0.08); }
+  .outcome-pill.starve { color: #f87171; border-color: #7a3535; background: rgba(248,113,113,0.08); }
+
+  /* Callouts */
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--panel-2);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 22px 0;
+  }
+  .callout .cap {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Data table */
+  table.knobs {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+  }
+  table.knobs td, table.knobs th {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--sc-line);
+    font-variant-numeric: tabular-nums;
+  }
+  table.knobs th { color: var(--sc-muted); font-weight: 500; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.06em; }
+  table.knobs td.val { color: var(--b-plant-icon); text-align: right; }
+
+  /* Ordered step list */
+  ol.steps { list-style: none; padding: 0; margin: 18px 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 2px 0 2px 42px;
+    margin-bottom: 16px;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0.05em;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps li strong { display: block; margin-bottom: 2px; }
+
+  /* Open questions */
+  details.q {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    background: var(--panel);
+  }
+  details.q summary {
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+    list-style: none;
+  }
+  details.q summary::-webkit-details-marker { display: none; }
+  details.q summary::before {
+    content: "+";
+    display: inline-block;
+    width: 1.1em;
+    color: var(--accent);
+    font-family: var(--font-mono);
+  }
+  details.q[open] summary::before { content: "–"; }
+  details.q .body { margin-top: 8px; color: var(--muted); font-size: 0.98rem; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 6px; }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--accent-warm);
+    border: 1.5px solid var(--accent-warm);
+    background: color-mix(in srgb, var(--accent-warm) 12%, transparent);
+    border-radius: 999px;
+    padding: 4px 11px;
+  }
+
+  /* ---------- Popup legend ---------- */
+  .legend-btn {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    color: var(--sc-ink);
+    background: var(--accent);
+    border: none;
+    border-radius: 999px;
+    padding: 12px 18px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.08) inset;
+    cursor: pointer;
+  }
+  .legend-btn:hover { filter: brightness(1.1); }
+  .legend-btn .dot {
+    width: 9px; height: 9px;
+    background: var(--sc-ink);
+    transform: rotate(45deg);
+    border-radius: 1px;
+    flex: 0 0 auto;
+  }
+
+  dialog.legend-dialog {
+    border: 1px solid var(--sc-line);
+    border-radius: 16px;
+    padding: 0;
+    max-width: min(440px, 90vw);
+    width: 100%;
+    background: var(--sc-panel);
+    color: var(--sc-text);
+  }
+  dialog.legend-dialog::backdrop { background: rgba(4, 8, 12, 0.6); }
+  .legend-dialog-inner { padding: 22px 24px 26px; }
+  .legend-dialog-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .legend-dialog-head h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    color: var(--sc-text);
+    margin: 0;
+  }
+  .legend-close {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--sc-muted);
+    background: transparent;
+    border: 1px solid var(--sc-line);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .legend-close:hover { color: var(--sc-text); border-color: var(--sc-muted); }
+  .legend-rows { display: flex; flex-direction: column; gap: 14px; }
+  .legend-row { display: flex; align-items: center; gap: 14px; }
+  .legend-row .tile { width: 40px; flex: 0 0 auto; }
+  .legend-row .lr-name { font-family: var(--font-display); font-weight: 600; font-size: 0.96rem; color: var(--sc-text); }
+  .legend-row .lr-desc { font-family: var(--font-mono); font-size: 0.76rem; color: var(--sc-muted); margin-top: 2px; }
+
+  @media (max-width: 480px) {
+    .legend-btn { right: 14px; bottom: 14px; padding: 11px 16px; }
+  }
+
+  footer {
+    max-width: 700px;
+    margin: 60px auto 0;
+    padding: 22px;
+    text-align: center;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--line);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tile { transition: none; }
+  }
+
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .panel { padding: 16px; border-radius: 10px; }
+    header.masthead { padding-top: 40px; }
+  }
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h6l-1 8 10-14h-6l1-6z" fill="currentColor"/></symbol>
+    <symbol id="icon-person" viewBox="0 0 24 24">
+      <circle cx="12" cy="7.2" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/>
+      <path d="M4 21c0-4.6 3.6-8.3 8-8.3s8 3.7 8 8.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="masthead">
+  <span class="kicker">Field Edition · v0.10</span>
+  <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
+  <p class="tagline">Player's Manual</p>
+  <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
+</header>
+
+<nav class="toc" aria-label="Table of contents">
+  <a href="#overview"><span class="n">§1</span>Overview</a>
+  <a href="#quick-start"><span class="n">§2</span>Quick Start</a>
+  <a href="#mechanics"><span class="n">§3</span>Mechanics</a>
+  <a href="#next"><span class="n">§4</span>Open Questions</a>
+</nav>
+
+<main>
+
+  <section id="overview">
+    <hr class="rule" style="margin-top:36px" />
+    <div class="eyebrow"><span class="num">§1</span> Overview</div>
+    <h2 class="h">What is this?</h2>
+    <p class="lede prose">
+      Casual Colony is a tap-driven puzzle about a signal network that, this
+      version, has a small colony living inside it. There is no clock — every
+      tap is a turn, and turns are the only kind of time the game keeps. You
+      light connected crystals by spending a limited energy budget, keep a
+      population of colonists fed on what your farms grow, and let mines turn
+      a well-fed colony into more energy to spend. A run ends when the energy
+      runs out, or when nothing left on the board would do anything if you
+      tapped it — whichever comes first.
+    </p>
+  </section>
+
+  <hr class="rule" />
+
+  <section id="quick-start">
+    <div class="eyebrow"><span class="num">§2</span> Quick Start</div>
+    <h2 class="h">Playing "Recolonized" — your first ten taps</h2>
+    <p class="prose">
+      <em>Recolonized</em> is the level built to walk you through every new
+      system at once. It starts you with <strong>8 energy</strong> and an
+      unlit board split into two halves: a small colony up top, and a crystal
+      ring waiting below. Tap the numbered tiles below in order — badges
+      <strong>1–10</strong> — and you'll see feeding, mining income, and a
+      full cascade in your first ten taps.
+    </p>
+
+    <div class="panel">
+      <div class="panel-cap">Fig. 1 — Recolonized, starting layout</div>
+      <div class="scroller">
+        <div class="board" role="img" aria-label="8 by 10 board. Row 1: four residential tiles at columns 3 to 6, numbered 4, 5, 6, and an unnumbered trap tile. Row 2: three farms at columns 3 to 5, numbered 1, 2, 3. Row 3: three mines at columns 3 to 5, numbered 7, 8, 9. Row 5: a power plant at column 3, numbered 10. Rows 6 to 8: an 8-cell crystal ring. All other tiles are empty desert.">
+          <!-- row 0: desert desert RES RES RES RES desert desert -->
+          <div class="tile"></div><div class="tile"></div>
+          <div class="tile tile--res" data-badge="4" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="5" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="6" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="?"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile"></div><div class="tile"></div>
+          <!-- row 1: desert desert FARM FARM FARM desert desert desert -->
+          <div class="tile"></div><div class="tile"></div>
+          <div class="tile tile--farm" data-badge="1" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile tile--farm" data-badge="2" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile tile--farm" data-badge="3" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 2: desert desert MINE MINE MINE desert desert desert -->
+          <div class="tile"></div><div class="tile"></div>
+          <div class="tile tile--mine" data-badge="7" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="8" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="9" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 3: all desert -->
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 4: desert desert PLANT desert x5 -->
+          <div class="tile"></div><div class="tile"></div>
+          <div class="tile tile--plant" data-badge="10" style="--accent-badge:#fbbf24"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 5: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
+          <div class="tile"></div>
+          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 6: desert CRYSTAL desert CRYSTAL desert x4 -->
+          <div class="tile"></div>
+          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile"></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 7: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
+          <div class="tile"></div>
+          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 8, 9: all desert -->
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+        </div>
+      </div>
+      <div class="panel-note">1–3 Farm · 4–6 Residential · 7–9 Mine · 10 Power Plant · <strong>?</strong> optional trap, see below — tap the <strong>Legend</strong> button any time for the full tile key</div>
+    </div>
+
+    <ol class="steps">
+      <li><strong>Farms first (1–3).</strong> Feeding always has to arrive before anyone moves in — after these three taps, food capacity is 3 and nobody has moved in yet.</li>
+      <li><strong>Residential next (4–6).</strong> Population climbs to 3, exactly matching capacity. The colony reads as fed — watch the HUD's population readout stay teal, not red.</li>
+      <li><strong>Mines (7–9).</strong> As long as you're fed, every activated mine adds energy back. Income should now be outpacing what these taps cost — your energy total climbs instead of falling.</li>
+      <li><strong>Power Plant (10).</strong> One tap lights the entire crystal ring below in a single cascading ripple — the plant's boost is strong enough to carry the signal all the way around.</li>
+    </ol>
+
+    <div class="callout">
+      <div class="cap">Try this</div>
+      <p>
+        There's a fourth residential tile on the board — the one marked
+        <strong>?</strong> — that was never part of the sequence above. Tap it
+        once: population rises to 4 against only 3 food, and the colony
+        starts starving. The HUD's population readout turns red and energy
+        begins draining. Tap that same tile a <em>second</em> time — an
+        already-active residential tile deactivates instead of lighting
+        again — and the colony is fed again immediately, for free.
+      </p>
+    </div>
+
+    <p class="prose">
+      You'll likely still have energy left after all ten taps — that's normal
+      for a colony earning more than it spends. See exactly how a run like
+      that actually ends in <a href="#ending">§3, How a Run Ends</a>.
+    </p>
+  </section>
+
+  <hr class="rule" />
+
+  <section id="mechanics">
+    <div class="eyebrow"><span class="num">§3</span> Mechanics</div>
+    <h2 class="h">How everything works</h2>
+
+    <h3 class="h">The board and your energy</h3>
+    <p class="prose">
+      Every level is a grid of tiles and a fixed <strong>energy
+      budget</strong>. A tap that actually activates something spends exactly
+      1 energy, no matter how many tiles it lights — you're paying for the
+      decision, not the payoff. Tapping desert, an already-lit tile, or
+      anything that wouldn't change the board is always free. There's no
+      timer and nothing moves on its own between taps; the board is exactly
+      as patient as you are.
+    </p>
+
+    <h3 class="h">Cascades: signal, attenuation, and boost</h3>
+    <p class="prose">
+      A tap hands the tapped tile <strong>1 unit of signal</strong>. Each
+      tile that activates passes signal onward to its neighbors, losing 1
+      unit per hop (<em>attenuation</em>) — and a plain crystal has no boost
+      of its own, so a tap on a lone crystal only ever lights that one tile.
+      A <strong>power plant</strong> is different: it adds a boost (5, by
+      default) to whatever signal passes through it, which is what lets one
+      tap ripple across a whole cluster.
+    </p>
+
+    <div class="panel">
+      <div class="panel-cap">Fig. 2 — Signal decay from a power plant (boost 5, attenuation 1)</div>
+      <div class="scroller">
+        <div class="chain">
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">tap → 5 out</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">4 out</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">3 out</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">2 out</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">1 out</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">0 — stops</div></div>
+        </div>
+      </div>
+      <div class="panel-note">A lone crystal, tapped directly: signal in 1, out <strong>1 + 0 − 1 = 0</strong> — it lights itself and nothing further.</div>
+    </div>
+
+    <p class="prose">
+      Red and green crystal behave exactly like plain crystal, but only
+      spread along one axis each — red north/south, green east/west — so a
+      level's crystal color isn't cosmetic, it's a constraint on which
+      direction a cluster can grow.
+    </p>
+
+    <h3 class="h">Drain — the tile that costs you progress</h3>
+    <p class="prose">
+      A <strong>drain</strong> tile never lights up itself. It deactivates
+      every currently-lit tile orthogonally next to it, and it fires two
+      ways: tapped directly (costs energy, only if there's something to
+      clear), or <em>reactively</em>, the instant any cascade lights a tile
+      next to it — for free, the same tick. A tile beside a drain effectively
+      can't stay lit.
+    </p>
+
+    <h3 class="h">The colony economy</h3>
+    <p class="prose">
+      Residential, farm, and mine tiles don't propagate signal — each only
+      ever activates itself. Instead, they feed a second system, recomputed
+      fresh from the board after every tap:
+    </p>
+
+    <div class="panel">
+      <div class="panel-cap">Fig. 3 — Fed vs. starving</div>
+      <div class="flow">
+        <div class="flow-col">
+          <div class="flow-tiles">
+            <div class="tile tile--res active"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+            <div class="tile tile--res active"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+            <div class="tile tile--res active"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          </div>
+          <div class="flow-label">Residential →<br />Population</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="stat-box"><div class="n">3</div><div class="l">Population</div></div>
+        <div class="flow-arrow" style="font-family:var(--font-mono);font-size:1rem">vs</div>
+        <div class="stat-box"><div class="n">3</div><div class="l">Food capacity</div></div>
+        <div class="flow-arrow">←</div>
+        <div class="flow-col">
+          <div class="flow-tiles">
+            <div class="tile tile--farm active"><div class="tile-icon"><div class="leaf"></div></div></div>
+            <div class="tile tile--farm active"><div class="tile-icon"><div class="leaf"></div></div></div>
+            <div class="tile tile--farm active"><div class="tile-icon"><div class="leaf"></div></div></div>
+          </div>
+          <div class="flow-label">Farm →<br />Food capacity</div>
+        </div>
+      </div>
+      <div class="flow" style="margin-top:18px">
+        <div class="branch">
+          <div class="outcome-pill fed">population ≤ capacity → <strong>fed</strong></div>
+          <div class="panel-note" style="margin:0">+ mineYield energy per active mine</div>
+        </div>
+        <div class="flow-arrow" style="visibility:hidden">→</div>
+        <div class="branch">
+          <div class="outcome-pill starve">population &gt; capacity → <strong>starving</strong></div>
+          <div class="panel-note" style="margin:0">− starvationPenalty energy per person over capacity</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="prose">
+      Mines only pay out while the colony is fed — a starving colony's mines
+      sit idle, and the shortfall bleeds energy instead. That drain is what
+      you're avoiding by managing population yourself, tile by tile.
+    </p>
+
+    <h3 class="h">Free culling</h3>
+    <p class="prose">
+      Residential is the one building you can turn back off: tap an
+      already-active residential tile and it deactivates, dropping
+      population by one. It's the <strong>only free action in the game</strong>
+      — no energy cost, and it works even at 0 energy — because it's the
+      player's own tool for fixing a starving colony, rather than the game
+      quietly picking who starves. A paid or blocked cull could leave a
+      starving colony with no way back; a free one never can.
+    </p>
+
+    <h3 class="h" id="ending">How a run ends</h3>
+    <p class="prose">
+      A run resolves the moment nothing about the board can change further —
+      whichever happens first:
+    </p>
+    <ul>
+      <li><strong>Energy hits 0.</strong> The original rule: no taps left to spend.</li>
+      <li><strong>The board is exhausted.</strong> New with mining: if your
+        colony earns more than it spends, energy can climb instead of drain.
+        Once every remaining tile would be a no-op if tapped, the run ends
+        right there — even with energy still on the clock.</li>
+    </ul>
+    <p class="prose">
+      Either way, the fraction of the whole board that ended up activated is
+      compared against the level's completion goal: meet or beat it and it's
+      a win, fall short and it's a loss.
+    </p>
+
+    <h3 class="h">Recolonized's numbers</h3>
+    <div class="panel">
+      <div class="panel-cap">Fig. 4 — Level knobs, "Recolonized"</div>
+      <table class="knobs">
+        <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
+        <tr><td>energyBudget</td><td class="val">8</td><td>Starting energy</td></tr>
+        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the 80-tile board you need lit</td></tr>
+        <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per active farm</td></tr>
+        <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
+        <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity</td></tr>
+        <tr><td>attenuation</td><td class="val">1</td><td>Signal lost per hop (default)</td></tr>
+        <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section id="next">
+    <div class="eyebrow"><span class="num">§4</span> Open Questions</div>
+    <h2 class="h">What's undecided, and what's not built yet</h2>
+    <p class="prose">
+      Casual Colony is a small game that grows one system at a time. Some of
+      what's below is genuinely undecided; the rest is scoped out on purpose,
+      for now.
+    </p>
+
+    <h3 class="h">Still open</h3>
+    <details class="q">
+      <summary>Should winning ever be spatial, not just a percentage?</summary>
+      <div class="body">Right now the win condition only cares about the
+        fraction of the whole board activated — not where those tiles are.
+        Contiguous territory, or holding a shape, is a different kind of
+        puzzle that hasn't been tried.</div>
+    </details>
+    <details class="q">
+      <summary>Should placing buildings ever cost energy mid-run?</summary>
+      <div class="body">Right now you can only change what a tile <em>is</em>
+        in the separate level editor, outside a real run, for free. Spending
+        energy to place a building as part of a run — instead of just
+        activating what's already there — is a different game and hasn't
+        been built.</div>
+    </details>
+    <details class="q">
+      <summary>Where should more job types plug in?</summary>
+      <div class="body">Mining was the first colony "job." Sensor towers
+        (revealing fog of war) and defense against dangers were both part of
+        the original pitch — the colony economy was built generally enough
+        for a new job to opt in the same way mining did, as one flag on a
+        building, but neither exists yet.</div>
+    </details>
+
+    <h3 class="h">Explicitly not built yet</h3>
+    <div class="tag-row">
+      <span class="tag">Real-time ticking</span>
+      <span class="tag">Fog of war</span>
+      <span class="tag">Sensor towers</span>
+      <span class="tag">Defense / dangers</span>
+      <span class="tag">Progression between levels</span>
+      <span class="tag">Sound</span>
+      <span class="tag">Offline level generation</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Casual Colony — Player's Manual · built for v0.10.0
+</footer>
+
+<button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">
+  <span class="dot" aria-hidden="true"></span> Legend
+</button>
+
+<dialog class="legend-dialog" id="legend-dialog" aria-labelledby="legend-dialog-title">
+  <div class="legend-dialog-inner">
+    <div class="legend-dialog-head">
+      <h3 id="legend-dialog-title">Tile key</h3>
+      <button type="button" class="legend-close" id="legend-close">Close ✕</button>
+    </div>
+    <div class="legend-rows">
+      <div class="legend-row">
+        <div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div>
+        <div>
+          <div class="lr-name">Crystal</div>
+          <div class="lr-desc">Propagates signal to connected crystals &amp; the power plant</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
+        <div>
+          <div class="lr-name">Power Plant</div>
+          <div class="lr-desc">Boosts signal passing through it — reaches far past a lone crystal</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--res active"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+        <div>
+          <div class="lr-name">Residential</div>
+          <div class="lr-desc">Houses population — tap again to free-cull it if the colony starves</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--farm active"><div class="tile-icon"><div class="leaf"></div></div></div>
+        <div>
+          <div class="lr-name">Farm</div>
+          <div class="lr-desc">Grows food capacity to keep population fed</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--mine active"><div class="tile-icon is-text">$</div></div>
+        <div>
+          <div class="lr-name">Mine</div>
+          <div class="lr-desc">Converts a fed colony into energy income</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile"></div>
+        <div>
+          <div class="lr-name">Desert</div>
+          <div class="lr-desc">Inert — never activates, never costs energy to tap</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-note" style="margin-top:18px">A frame and a brighter tile mean <strong>active</strong> — the symbol itself never dims, so type is always legible.</div>
+  </div>
+</dialog>
+
+<script>
+  (function () {
+    var dialog = document.getElementById("legend-dialog");
+    var openBtn = document.getElementById("legend-open");
+    var closeBtn = document.getElementById("legend-close");
+    openBtn.addEventListener("click", function () { dialog.showModal(); });
+    closeBtn.addEventListener("click", function () { dialog.close(); });
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) dialog.close();
+    });
+  })();
+</script>
+</body>
+</html>
