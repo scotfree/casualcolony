@@ -20,10 +20,11 @@
 <div id="summary"></div>
 
 <script type="module">
-import { parseLevel } from "./level.js";
+import { parseLevel, loadLevelSet, serializeLevel } from "./level.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor } from "./buildings.js";
+import { loadSavedLevels, saveLevel } from "./storage.js";
 
 const results = document.getElementById("results");
 let passed = 0;
@@ -515,14 +516,88 @@ test("parses a custom powerPlantBoost", () => {
   assertEqual(world.powerPlantBoost, 12, "custom boost");
 });
 
-// --- The shipped level ------------------------------------------------------
+// --- Level serialization (the editor's save path) ----------------------------
+
+test("serializeLevel round-trips an edited board", () => {
+  const world = build(["C.", ".C"]);
+  cellAt(world, 1, 0).type = "drain"; // simulate an edit made in the picker
+  const record = serializeLevel(world, "edited");
+  assertEqual(record.name, "edited", "name");
+  assertEqual(record.grid, ["CD", ".C"], "the edit shows up in the grid");
+
+  const reparsed = parseLevel(record);
+  assertEqual(cellAt(reparsed, 1, 0).type, "drain", "re-parses back to the edited type");
+});
+
+test("serializeLevel carries level parameters through unchanged", () => {
+  const world = build(["C."], {
+    energyBudget: 7,
+    completionGoal: 0.3,
+    attenuation: 2,
+    powerPlantBoost: 9,
+  });
+  const record = serializeLevel(world, "params");
+  assertEqual(record.energyBudget, 7, "energyBudget");
+  assertEqual(record.completionGoal, 0.3, "completionGoal");
+  assertEqual(record.attenuation, 2, "attenuation");
+  assertEqual(record.powerPlantBoost, 9, "powerPlantBoost");
+});
+
+// --- Saved-level storage (localStorage, real in this browser) ---------------
+
+test("saveLevel then loadSavedLevels round-trips", () => {
+  const before = loadSavedLevels().length;
+  saveLevel({
+    name: "__test_level__",
+    size: { width: 1, height: 1 },
+    energyBudget: 1,
+    completionGoal: 1,
+    legend: { ".": "desert" },
+    grid: ["."],
+  });
+  const after = loadSavedLevels();
+  assertEqual(after.length, before + 1, "one more saved level");
+  assert(after.some((r) => r.name === "__test_level__"), "the saved level is present");
+});
+
+test("saveLevel overwrites an existing entry with the same name", () => {
+  saveLevel({
+    name: "__test_level__",
+    size: { width: 2, height: 1 },
+    energyBudget: 2,
+    completionGoal: 1,
+    legend: { ".": "desert" },
+    grid: [".."],
+  });
+  const matches = loadSavedLevels().filter((r) => r.name === "__test_level__");
+  assertEqual(matches.length, 1, "still only one entry with this name");
+  assertEqual(matches[0].size.width, 2, "overwritten, not duplicated");
+});
+
+// Clean up so re-running this page in a real browser doesn't leave test junk
+// behind in localStorage. storage.js has no delete of its own (not needed by
+// the game), so this pokes the same key directly.
+{
+  const all = JSON.parse(localStorage.getItem("casualcolony:levels") || "{}");
+  delete all["__test_level__"];
+  localStorage.setItem("casualcolony:levels", JSON.stringify(all));
+}
+
+// --- The shipped level set ---------------------------------------------------
 // Loaded over fetch, so these run asynchronously after the tests above.
 
 const summary = document.getElementById("summary");
 
-fetch("./levels/random-crystal-forest.json")
-  .then((response) => response.json())
-  .then((data) => {
+(async () => {
+  try {
+    const rawLevels = await loadLevelSet("./levels/levels.json");
+
+    test("levels.json is an array containing simple test", () => {
+      assert(Array.isArray(rawLevels), "must be an array");
+      assert(rawLevels.some((r) => r.name === "simple test"), "has the simple test level");
+    });
+
+    const data = rawLevels.find((r) => r.name === "simple test");
     const world = parseLevel(data);
     const crystals = world.cells.filter((c) => c.type === "crystal");
 
@@ -572,16 +647,15 @@ fetch("./levels/random-crystal-forest.json")
         `need ${(sim.completionGoal * 100).toFixed(1)}%`
       );
     });
-  })
-  .catch((error) => {
+  } catch (error) {
     failed++;
-    add("fail", "shipped level could not be loaded");
+    add("fail", "shipped level set could not be loaded");
     add("detail", error.message);
-  })
-  .finally(() => {
+  } finally {
     summary.textContent = `${passed} passed, ${failed} failed`;
     summary.style.color = failed > 0 ? "#f87171" : "#5eead4";
-  });
+  }
+})();
 </script>
 </body>
 </html>

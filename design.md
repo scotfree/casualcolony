@@ -345,14 +345,15 @@ preview it.
 game is canvas-drawn, but a list of clickable, labeled options with a
 selected state is exactly what HTML buttons already are — hand-rolling that
 in canvas would mean reimplementing hit-testing, focus, and text layout for
-no benefit. `index.html` gets a `#tile-picker` overlay (hidden by default)
-and `game.js` populates it with real `<button>` elements built from
-`BUILDINGS`, one per legend type, each showing a small color swatch (its
-`lit`, `icon`, or `fill`, whichever exists) next to its name. This is the
-first departure from "everything is canvas" in the whole project, and it's a
-narrow, deliberate one — the picker doesn't touch game state directly, it
-just calls back into the same `cell.type = ...` assignment editing would use
-regardless of how the UI were built.
+no benefit. `index.html` gets a single `#modal` overlay (hidden by default,
+reused for the tile picker, the level picker, and the save-as-new name
+prompt — see Milestone 5) and `game.js` populates it with real `<button>`
+elements built from `BUILDINGS`, one per legend type, each showing a small
+color swatch (its `lit`, `icon`, or `fill`, whichever exists) next to its
+name. This is the first departure from "everything is canvas" in the whole
+project, and it's a narrow, deliberate one — the picker doesn't touch game
+state directly, it just calls back into the same `cell.type = ...`
+assignment editing would use regardless of how the UI were built.
 
 **Why the legend, not the full building table:** `parseLevel` now keeps the
 level's `legend` (character → type id) on the returned world object
@@ -367,6 +368,46 @@ what "edit" means here, and conflating the two would make it much harder to
 tell whether a level felt different because of a layout change or a rules
 change. If level-wide tuning ever needs its own UI, that's a separate
 control, not an extension of the tile picker.
+
+## Milestone 5 — A set of levels, and saving what you edit
+
+Up through Milestone 4 there was exactly one level, loaded from one file. This
+turns that into a *set*: `levels/levels.json` is now a JSON array of level
+records — the same shape as before, just collected — and the game offers a
+level picker (behind the same button that used to just restart the current
+level) instead of always loading the one file. The shipped level itself was
+renamed "simple test" and is the first (and so far only) entry.
+
+**There's no backend, so "saving" means localStorage.** This is still a
+static site with nothing to POST to — `storage.js` writes edited or
+newly-named levels into `localStorage`, keyed by name, and reads them back
+into the level list alongside the shipped set. A saved level with the same
+name as a shipped one shadows it — that's the entire mechanism behind "save
+as current": it's really always "save as [this name]," and updating the
+current level is just the case where that name already exists. `game.js`
+merges shipped + saved by name at startup (saved wins) so a player's edits
+survive a reload without needing anything server-side at all.
+
+**`serializeLevel` is `parseLevel` run backward.** The editor mutates
+`cell.type` directly on the live, playable `world` — that was already true
+in Milestone 4 — but saving needs a plain JSON-shaped record to hand to
+`storage.js`, not a `world` with mutable per-cell state. `serializeLevel`
+(`level.js`) rebuilds the `grid` row-strings from the current cells by
+reversing the level's own `legend` (type → first character that maps to it),
+and carries `energyBudget`/`completionGoal`/`attenuation`/`powerPlantBoost`
+through untouched. Editing can only ever introduce types already in the
+legend (the picker is scoped to it), so the legend itself never needs to
+change — reused as-is.
+
+**Two save paths, one button, context-dependent:** the reset/level-picker
+button becomes "save as" while editing (opens the name-prompt modal,
+prefilled with the current name — confirming with the same name is
+indistinguishable from "update current," which is fine, that's what it *is*),
+and the edit-toggle button becomes "restart" while editing (saves under the
+*current* name unconditionally, no prompt, then restarts play). Both funnel
+into `loadLevelByRecord`, which always re-`parseLevel`s rather than reusing
+the in-memory `world` — a freshly saved level should never carry over stale
+per-cell animation state from the session that created it.
 
 ## Decisions so far
 
@@ -383,6 +424,9 @@ control, not an extension of the tile picker.
 | Boost lives in the level file, referenced from the building via `boostKey` | Same level-tunable status as attenuation, without `cascade.js` needing to know building ids by name |
 | Tile picker is a DOM modal, not canvas-drawn | Buttons with labels and a selected state are what HTML already does well; no reason to reimplement that in canvas |
 | Editor scoped to the level's own legend, and only edits tile types | Keeps the picker relevant per-level and keeps "layout change" separate from "rules change" (energy/goal/attenuation/boost) |
+| Levels ship as one JSON array, not one file each | The game can offer a list to pick from without a separate index file to keep in sync |
+| Saved levels live in localStorage, keyed by name, shadowing shipped names | The only persistence a static site can have without a backend; matches "save as current" being "save as [this name]" |
+| `serializeLevel` reuses the level's existing legend rather than inventing characters | Editing can only introduce types already in the legend, so the legend never needs to change |
 
 ## Open questions
 
@@ -403,7 +447,10 @@ control, not an extension of the tile picker.
 ## Explicitly not doing yet
 
 - Real-time ticking of any kind
-- Save/load or progression between levels
+- Progression between levels (unlocks, a "next level" flow, tracking which
+  ones you've won). Milestone 5 added save/load, but only of level *content*
+  (localStorage, via the editor) — there's still no notion of player state
+  or progress across levels
 - Sound
 - Building placement as a *gameplay* mechanic (spent from the energy budget,
   part of a run) — the level editor added authoring-time placement, which is

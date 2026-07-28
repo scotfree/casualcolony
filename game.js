@@ -1,13 +1,14 @@
 // Casual Colony — board rendering, input and the cascade animation.
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
-import { loadLevel } from "./level.js";
+import { loadLevelSet, parseLevel, serializeLevel } from "./level.js";
+import { loadSavedLevels, saveLevel } from "./storage.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.7.0";
-const LEVEL_URL = "./levels/random-crystal-forest.json";
+const VERSION = "0.8.0";
+const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
 // cell takes to pop in. Together these set the whole feel of a chain reaction.
@@ -28,6 +29,10 @@ let outcome = null;
 // True while the level editor is open. Tapping a cell then edits its type
 // instead of playing a turn — see the tile picker below.
 let editMode = false;
+// Every level available to play: the shipped set plus anything saved to
+// localStorage, merged by name (a saved name shadows a shipped one with the
+// same name). Raw records, not parsed worlds — see loadLevelByRecord.
+let levelList = [];
 
 // Board geometry, recomputed on resize.
 let width = 0;
@@ -38,9 +43,12 @@ let originY = 0;
 let resetButton = null;
 let editButton = null;
 
-const picker = document.getElementById("tile-picker");
-const pickerPanel = document.getElementById("tile-picker-panel");
-// The cell the open picker is editing, or null while it's closed.
+// One modal, reused for the tile picker, the level picker, and the
+// save-as-new name prompt — see style.css for why it's plain DOM.
+const modal = document.getElementById("modal");
+const modalPanel = document.getElementById("modal-panel");
+// The cell the open tile picker is editing, or null the rest of the time
+// (including while the level picker or save prompt is open instead).
 let pickerCell = null;
 
 // --- Layout -----------------------------------------------------------------
@@ -91,37 +99,58 @@ function hitsButton(button, clientX, clientY) {
   return x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h;
 }
 
-// Clears play progress without touching tile types — what both "reset" and
-// leaving edit mode do. A level built or edited this way still plays with
-// its authored energyBudget/completionGoal/attenuation/powerPlantBoost;
-// only which cells are which building type is ever changed.
-function resetBoard() {
-  for (const cell of world.cells) {
-    cell.activateAt = null;
-    cell.drainedAt = null;
-  }
-  world.energy = world.energyBudget;
+// Makes `record` the level actually being played: parses it fresh (so its
+// cells' mutable state starts clean, never reused from whatever was loaded
+// before) and leaves edit mode, since loading a level and editing the
+// previous one are two different things.
+function loadLevelByRecord(record) {
+  world = parseLevel(record);
   outcome = null;
+  editMode = false;
+  resize();
 }
 
-// --- Tile picker --------------------------------------------------------
-// A plain DOM modal, not canvas-drawn — see style.css for why.
+// Adds `record` to the in-memory level list, or replaces the existing entry
+// with the same name — keeps the level picker in sync with storage.js
+// immediately, without needing a reload.
+function upsertLevelList(record) {
+  const index = levelList.findIndex((r) => r.name === record.name);
+  if (index === -1) levelList.push(record);
+  else levelList[index] = record;
+}
 
-function openPicker(cell) {
+function saveAsCurrent() {
+  const record = serializeLevel(world, world.name);
+  saveLevel(record);
+  upsertLevelList(record);
+  loadLevelByRecord(record);
+}
+
+function saveAsNew(name) {
+  const record = serializeLevel(world, name);
+  saveLevel(record);
+  upsertLevelList(record);
+  loadLevelByRecord(record);
+}
+
+// --- Modal: tile picker, level picker, save-as-new prompt -------------------
+// A plain DOM overlay, not canvas-drawn — see style.css for why.
+
+function openTilePicker(cell) {
   pickerCell = cell;
-  pickerPanel.innerHTML = "";
+  modalPanel.innerHTML = "";
   const types = [...new Set(Object.values(world.legend))];
   for (const typeId of types) {
     const building = BUILDINGS[typeId];
     const button = document.createElement("button");
-    button.className = "tile-option" + (typeId === cell.type ? " selected" : "");
+    button.className = "option" + (typeId === cell.type ? " selected" : "");
     const swatchColor = building.lit || building.icon || building.fill;
     button.innerHTML =
       `<span class="swatch" style="background:${swatchColor}"></span>${building.name}`;
     button.addEventListener("click", () => selectType(typeId));
-    pickerPanel.appendChild(button);
+    modalPanel.appendChild(button);
   }
-  picker.classList.remove("hidden");
+  modal.classList.remove("hidden");
 }
 
 function selectType(typeId) {
@@ -130,32 +159,98 @@ function selectType(typeId) {
     pickerCell.activateAt = null;
     pickerCell.drainedAt = null;
   }
-  closePicker();
+  closeModal();
 }
 
-function closePicker() {
+function openLevelPicker() {
+  modalPanel.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "modal-title";
+  title.textContent = "choose a level";
+  modalPanel.appendChild(title);
+  for (const record of levelList) {
+    const button = document.createElement("button");
+    button.className = "option" + (record.name === world.name ? " selected" : "");
+    button.textContent = record.name;
+    button.addEventListener("click", () => {
+      loadLevelByRecord(record);
+      closeModal();
+    });
+    modalPanel.appendChild(button);
+  }
+  modal.classList.remove("hidden");
+}
+
+function openSavePrompt() {
+  modalPanel.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "modal-title";
+  title.textContent = "save as new level";
+  modalPanel.appendChild(title);
+
+  const input = document.createElement("input");
+  input.className = "modal-input";
+  input.type = "text";
+  input.value = world.name;
+  modalPanel.appendChild(input);
+
+  const save = document.createElement("button");
+  save.className = "modal-save";
+  save.textContent = "save";
+  modalPanel.appendChild(save);
+
+  const updateEnabled = () => {
+    save.disabled = input.value.trim().length === 0;
+  };
+  input.addEventListener("input", updateEnabled);
+  updateEnabled();
+
+  const commit = () => {
+    const name = input.value.trim();
+    if (!name) return;
+    saveAsNew(name);
+    closeModal();
+  };
+  save.addEventListener("click", commit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") commit();
+  });
+
+  modal.classList.remove("hidden");
+  input.focus();
+  input.select();
+}
+
+function closeModal() {
   pickerCell = null;
-  picker.classList.add("hidden");
+  modal.classList.add("hidden");
 }
 
-// A click that lands on the dimmed backdrop (not a button inside the panel)
-// cancels without changing anything.
-picker.addEventListener("click", closePicker);
-pickerPanel.addEventListener("click", (event) => event.stopPropagation());
+// A click that lands on the dimmed backdrop (not the panel itself) cancels
+// without changing anything.
+modal.addEventListener("click", closeModal);
+modalPanel.addEventListener("click", (event) => event.stopPropagation());
 
 canvas.addEventListener("pointerdown", (event) => {
   if (!world) return;
 
   if (hitsButton(editButton, event.clientX, event.clientY)) {
-    editMode = !editMode;
-    // "Tapping back" restarts the level in normal play mode — tile-type
-    // edits stick, but progress made before or during editing doesn't.
-    if (!editMode) resetBoard();
+    if (editMode) {
+      // "Restart" while editing: save over the level as currently loaded,
+      // then start playing the freshly-saved version.
+      saveAsCurrent();
+    } else {
+      editMode = true;
+    }
     return;
   }
 
   if (hitsButton(resetButton, event.clientX, event.clientY)) {
-    resetBoard();
+    // Same button, different job depending on mode: outside the editor it
+    // picks which level to (re)play; inside it, there's nothing to "pick" —
+    // tapping it means "save what I've built" under a new name instead.
+    if (editMode) openSavePrompt();
+    else openLevelPicker();
     return;
   }
 
@@ -163,7 +258,7 @@ canvas.addEventListener("pointerdown", (event) => {
   if (!cell) return;
 
   if (editMode) {
-    openPicker(cell);
+    openTilePicker(cell);
     return;
   }
 
@@ -321,14 +416,14 @@ function drawHud() {
 
   ctx.textAlign = "right";
 
-  const resetLabel = "reset";
+  const resetLabel = editMode ? "save as" : "retry";
   ctx.fillStyle = "#4a5568";
   ctx.fillText(resetLabel, width - 14, row1);
   // Generous tap target around the label — 13px text is far too small to hit.
   const resetWidth = ctx.measureText(resetLabel).width;
   resetButton = { x: width - 14 - resetWidth - 12, y: 0, w: resetWidth + 26, h: HUD_HEIGHT };
 
-  const editLabel = editMode ? "done" : "edit";
+  const editLabel = editMode ? "restart" : "edit";
   ctx.fillStyle = editMode ? "#5eead4" : "#4a5568";
   const editRight = resetButton.x - 6;
   ctx.fillText(editLabel, editRight, row1);
@@ -354,7 +449,7 @@ function drawOutcome() {
   const goalPct = Math.round(world.completionGoal * 100);
   const gotPct = Math.round(fraction * 100);
   ctx.fillText(`${gotPct}% activated · goal was ${goalPct}%`, width / 2, height / 2 + 14);
-  ctx.fillText("tap reset to try again", width / 2, height / 2 + 36);
+  ctx.fillText("tap retry to try again", width / 2, height / 2 + 36);
 }
 
 function drawError(message) {
@@ -397,14 +492,23 @@ function frame(now) {
 
 // --- Start ------------------------------------------------------------------
 
+// Shipped levels plus locally-saved ones, merged by name — a saved level
+// with the same name as a shipped one shadows it (how "save as current"
+// works, since there's nowhere to write the shipped file itself).
+function mergeLevelLists(shipped, saved) {
+  const byName = new Map(shipped.map((record) => [record.name, record]));
+  for (const record of saved) byName.set(record.name, record);
+  return [...byName.values()];
+}
+
 document.getElementById("version").textContent = "v" + VERSION;
 resize();
 requestAnimationFrame(frame);
 
-loadLevel(LEVEL_URL)
-  .then((loaded) => {
-    world = loaded;
-    resize();
+loadLevelSet(LEVEL_SET_URL)
+  .then((shipped) => {
+    levelList = mergeLevelLists(shipped, loadSavedLevels());
+    loadLevelByRecord(levelList[0]);
   })
   .catch((error) => {
     loadError = error.message;

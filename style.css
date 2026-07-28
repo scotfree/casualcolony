@@ -45,10 +45,11 @@ body {
   pointer-events: none;
 }
 
-/* The tile picker — a plain DOM modal rather than hand-rolled canvas UI,
-   since it's just a list of buttons and the browser already knows how to
-   lay those out, hit-test them, and take focus. */
-#tile-picker {
+/* One generic modal, reused for the tile picker, the level picker and the
+   save-as-new name prompt — a plain DOM overlay rather than hand-rolled
+   canvas UI, since these are just buttons and a text field, and the browser
+   already knows how to lay those out, hit-test them, and take focus. */
+#modal {
   position: fixed;
   inset: 0;
   background: #12161ccc;
@@ -59,11 +60,11 @@ body {
   touch-action: manipulation;
 }
 
-#tile-picker.hidden {
+#modal.hidden {
   display: none;
 }
 
-#tile-picker-panel {
+#modal-panel {
   background: #1a1f28;
   border: 1px solid #2a3441;
   border-radius: 12px;
@@ -76,7 +77,13 @@ body {
   overflow-y: auto;
 }
 
-.tile-option {
+.modal-title {
+  color: #8ea3b5;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 4px 8px 8px;
+}
+
+.option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -89,15 +96,45 @@ body {
   text-align: left;
 }
 
-.tile-option.selected {
+.option.selected {
   background: #232b37;
   border-color: #3a4a5c;
   color: #5eead4;
 }
 
-.tile-option .swatch {
+.option .swatch {
   width: 14px;
   height: 14px;
   border-radius: 4px;
   flex: none;
+}
+
+.modal-input {
+  background: #12161c;
+  border: 1px solid #2a3441;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #c7d3de;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: #5eead4;
+}
+
+.modal-save {
+  background: #1f3a36;
+  border: 1px solid #2dd4bf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #5eead4;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+
+.modal-save:disabled {
+  opacity: 0.4;
+  border-color: #2a3441;
+  color: #6b7f91;
 }

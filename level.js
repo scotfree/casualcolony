@@ -1,9 +1,15 @@
 // Level loading and validation.
 //
-// A level is a JSON file: a size, a legend mapping characters to building type
-// ids, and the grid as an array of row strings. Row strings mean a level can be
-// read and hand-edited in a text editor, which matters more than tidiness for a
-// puzzle game.
+// A level is a JSON record: a size, a legend mapping characters to building
+// type ids, and the grid as an array of row strings. Row strings mean a level
+// can be read and hand-edited in a text editor, which matters more than
+// tidiness for a puzzle game.
+//
+// Levels ship as a *set* — a JSON array of these records, each named — not
+// one file per level, so the game can offer a list to choose from without a
+// separate index. serializeLevel() below is the inverse of parseLevel(): it
+// turns a live, possibly-edited world back into the same record shape, for
+// the level editor to hand to storage.js.
 //
 // Validation is strict and loud. A malformed level should fail at load with a
 // message naming the problem, not render as a mysteriously wrong board.
@@ -107,10 +113,59 @@ export function parseLevel(data) {
   };
 }
 
-export async function loadLevel(url) {
+// Loads and validates every record in a level set up front — a malformed
+// level anywhere in the set fails loudly at startup, not confusingly later
+// when a player happens to pick it. Returns the raw records, not parsed
+// worlds: each one gets parsed fresh (via parseLevel) only once actually
+// selected, so playing/resetting a level never reuses another's mutable
+// per-cell state.
+export async function loadLevelSet(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not load ${url}: HTTP ${response.status}`);
   }
-  return parseLevel(await response.json());
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error(`Level set at ${url} must be a JSON array`);
+  }
+  data.forEach((record, i) => {
+    if (!record || typeof record.name !== "string" || !record.name) {
+      throw new Error(`Level set entry ${i} needs a non-empty name`);
+    }
+    parseLevel(record); // throws with a specific reason if this entry is broken
+  });
+  return data;
+}
+
+// The inverse of parseLevel: turns a live world (cells may have had their
+// type edited in place by the level editor) back into a plain JSON-shaped
+// level record under the given name. Only tile types can differ from the
+// record this world was parsed from — energyBudget, completionGoal,
+// attenuation and powerPlantBoost are carried through unchanged, since
+// editing never touches them.
+export function serializeLevel(world, name) {
+  const charFor = {};
+  for (const [char, typeId] of Object.entries(world.legend)) {
+    if (!(typeId in charFor)) charFor[typeId] = char;
+  }
+
+  const grid = [];
+  for (let y = 0; y < world.height; y++) {
+    let row = "";
+    for (let x = 0; x < world.width; x++) {
+      row += charFor[world.cells[y * world.width + x].type];
+    }
+    grid.push(row);
+  }
+
+  return {
+    name,
+    size: { width: world.width, height: world.height },
+    energyBudget: world.energyBudget,
+    completionGoal: world.completionGoal,
+    attenuation: world.attenuation,
+    powerPlantBoost: world.powerPlantBoost,
+    legend: world.legend,
+    grid,
+  };
 }
