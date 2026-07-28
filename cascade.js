@@ -4,11 +4,12 @@
 // again. That is a breadth-first walk from the tapped cell, following each
 // building's propagate rule — but it isn't unlimited. A tap hands the tapped
 // cell one unit of signal; each cell that activates passes along whatever
-// signal it received, plus its own boost (0 for most buildings, +5 for a
-// power plant), minus this level's attenuation (1 by default). Once that
-// hits zero, the signal is spent and the cascade stops spreading from there
-// — a lone crystal only ever lights itself, and it takes a power plant
-// somewhere in the chain to reach any further.
+// signal it received, plus its own boost (0 for most buildings; a power
+// plant's is world[boostKey], e.g. world.powerPlantBoost), minus this
+// level's attenuation (1 by default). Once that hits zero, the signal is
+// spent and the cascade stops spreading from there — a lone crystal only
+// ever lights itself, and it takes a power plant somewhere in the chain to
+// reach any further.
 //
 // The BFS *depth* is the useful part: cells at depth 0 light immediately,
 // depth 1 a moment later, and so on. Playing back depth by depth is exactly a
@@ -46,7 +47,8 @@ export function computeCascade(world, start) {
     for (const { cell, signal } of frontier) {
       const building = buildingFor(cell);
       if (!building.propagate) continue;
-      const outgoing = signal + (building.boost || 0) - world.attenuation;
+      const boost = building.boostKey ? world[building.boostKey] : 0;
+      const outgoing = signal + boost - world.attenuation;
       if (outgoing <= 0) continue; // signal spent here; nothing passes onward
       for (const neighbour of building.propagate(world, cell)) {
         if (seen.has(neighbour)) continue;

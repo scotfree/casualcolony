@@ -12,9 +12,11 @@
 // undoes neighbours' activation instead of spreading its own. Omit it for
 // buildings that don't drain.
 //
-// boost is how much this building adds to the signal when it activates,
-// before that signal attenuates on its way to the next cell. Omit it (or
-// leave it 0) for buildings that don't amplify — see cascade.js.
+// boostKey names a field on the level itself (like attenuation) holding how
+// much this building adds to the signal when it activates, before that
+// signal attenuates on its way to the next cell. Omit it for buildings that
+// don't amplify — see cascade.js. Boost lives on the level, not a hardcoded
+// number here, so different levels can tune it without a new building type.
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
@@ -92,9 +94,8 @@ export const BUILDINGS = {
     dormant: "#6b5a2f",
     lit: "#fbbf24",
     glow: "#f59e0b",
-    // Added to the signal when this cell activates, before the next hop's
-    // attenuation is subtracted. See cascade.js.
-    boost: 5,
+    // See world.powerPlantBoost (level.js) for the actual amount.
+    boostKey: "powerPlantBoost",
 
     // Same reach as plain crystal — every orthogonal crystal-family neighbour.
     propagate(world, cell) {

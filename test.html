@@ -288,6 +288,14 @@ test("tapping a power plant directly still costs exactly one energy's worth of s
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lone plant");
 });
 
+test("powerPlantBoost is configurable per level, like attenuation", () => {
+  // Same chain as the "fades by exactly one cell" test above, but with a
+  // boost of 1 instead of the default 5: 1+1-1=1 handed to the first C,
+  // which then has nothing left to pass on (1-1=0) — the chain barely moves.
+  const world = build(["PCCCCCC"], { powerPlantBoost: 1 });
+  assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0"], "weaker boost, shorter reach");
+});
+
 // --- Drain --------------------------------------------------------------
 
 // Coordinates of the cells drain() returns, sorted, for order-independent
@@ -484,6 +492,27 @@ test("parses valid energyBudget and completionGoal", () => {
   assertEqual(world.energyBudget, 3, "energyBudget");
   assertEqual(world.completionGoal, 0.5, "completionGoal");
   assertEqual(world.energy, 3, "energy starts at budget");
+});
+
+test("powerPlantBoost defaults to 5 when omitted", () => {
+  const world = build(["C."]);
+  assertEqual(world.powerPlantBoost, 5, "default boost");
+});
+
+test("rejects a negative powerPlantBoost", () => {
+  assertThrows(() => parseLevel({
+    size: { width: 1, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["."],
+    energyBudget: 1,
+    completionGoal: 0.5,
+    powerPlantBoost: -1,
+  }), "powerPlantBoost must be a non-negative number");
+});
+
+test("parses a custom powerPlantBoost", () => {
+  const world = build(["C."], { powerPlantBoost: 12 });
+  assertEqual(world.powerPlantBoost, 12, "custom boost");
 });
 
 // --- The shipped level ------------------------------------------------------

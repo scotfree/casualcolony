@@ -4,9 +4,9 @@
 import { loadLevel } from "./level.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { cellAt } from "./grid.js";
-import { buildingFor } from "./buildings.js";
+import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const LEVEL_URL = "./levels/random-crystal-forest.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -25,6 +25,9 @@ let loadError = null;
 // null while playing, "win" or "lose" once energy runs out and the last
 // cascade has finished animating.
 let outcome = null;
+// True while the level editor is open. Tapping a cell then edits its type
+// instead of playing a turn — see the tile picker below.
+let editMode = false;
 
 // Board geometry, recomputed on resize.
 let width = 0;
@@ -33,6 +36,12 @@ let cellSize = 0;
 let originX = 0;
 let originY = 0;
 let resetButton = null;
+let editButton = null;
+
+const picker = document.getElementById("tile-picker");
+const pickerPanel = document.getElementById("tile-picker-panel");
+// The cell the open picker is editing, or null while it's closed.
+let pickerCell = null;
 
 // --- Layout -----------------------------------------------------------------
 // The canvas fills its safe-area-inset stage; the board is square-celled and
@@ -74,37 +83,92 @@ function cellFromPoint(clientX, clientY) {
   return cellAt(world, x, y);
 }
 
-function hitsResetButton(clientX, clientY) {
-  if (!resetButton) return false;
+function hitsButton(button, clientX, clientY) {
+  if (!button) return false;
   const rect = canvas.getBoundingClientRect();
   const x = clientX - rect.left;
   const y = clientY - rect.top;
-  return (
-    x >= resetButton.x &&
-    x <= resetButton.x + resetButton.w &&
-    y >= resetButton.y &&
-    y <= resetButton.y + resetButton.h
-  );
+  return x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h;
 }
+
+// Clears play progress without touching tile types — what both "reset" and
+// leaving edit mode do. A level built or edited this way still plays with
+// its authored energyBudget/completionGoal/attenuation/powerPlantBoost;
+// only which cells are which building type is ever changed.
+function resetBoard() {
+  for (const cell of world.cells) {
+    cell.activateAt = null;
+    cell.drainedAt = null;
+  }
+  world.energy = world.energyBudget;
+  outcome = null;
+}
+
+// --- Tile picker --------------------------------------------------------
+// A plain DOM modal, not canvas-drawn — see style.css for why.
+
+function openPicker(cell) {
+  pickerCell = cell;
+  pickerPanel.innerHTML = "";
+  const types = [...new Set(Object.values(world.legend))];
+  for (const typeId of types) {
+    const building = BUILDINGS[typeId];
+    const button = document.createElement("button");
+    button.className = "tile-option" + (typeId === cell.type ? " selected" : "");
+    const swatchColor = building.lit || building.icon || building.fill;
+    button.innerHTML =
+      `<span class="swatch" style="background:${swatchColor}"></span>${building.name}`;
+    button.addEventListener("click", () => selectType(typeId));
+    pickerPanel.appendChild(button);
+  }
+  picker.classList.remove("hidden");
+}
+
+function selectType(typeId) {
+  if (pickerCell) {
+    pickerCell.type = typeId;
+    pickerCell.activateAt = null;
+    pickerCell.drainedAt = null;
+  }
+  closePicker();
+}
+
+function closePicker() {
+  pickerCell = null;
+  picker.classList.add("hidden");
+}
+
+// A click that lands on the dimmed backdrop (not a button inside the panel)
+// cancels without changing anything.
+picker.addEventListener("click", closePicker);
+pickerPanel.addEventListener("click", (event) => event.stopPropagation());
 
 canvas.addEventListener("pointerdown", (event) => {
   if (!world) return;
 
-  if (hitsResetButton(event.clientX, event.clientY)) {
-    for (const cell of world.cells) {
-      cell.activateAt = null;
-      cell.drainedAt = null;
-    }
-    world.energy = world.energyBudget;
-    outcome = null;
+  if (hitsButton(editButton, event.clientX, event.clientY)) {
+    editMode = !editMode;
+    // "Tapping back" restarts the level in normal play mode — tile-type
+    // edits stick, but progress made before or during editing doesn't.
+    if (!editMode) resetBoard();
+    return;
+  }
+
+  if (hitsButton(resetButton, event.clientX, event.clientY)) {
+    resetBoard();
+    return;
+  }
+
+  const cell = cellFromPoint(event.clientX, event.clientY);
+  if (!cell) return;
+
+  if (editMode) {
+    openPicker(cell);
     return;
   }
 
   // No taps once the budget is spent — the run is over, win or lose.
   if (world.energy <= 0) return;
-
-  const cell = cellFromPoint(event.clientX, event.clientY);
-  if (!cell) return;
 
   const building = buildingFor(cell);
   if (building.drain) {
@@ -255,14 +319,21 @@ function drawHud() {
   ctx.textAlign = "center";
   ctx.fillText(`${active} / ${total} activated   ⚡ ${world.energy}`, width / 2, row2);
 
-  const label = "reset";
-  ctx.fillStyle = "#4a5568";
   ctx.textAlign = "right";
-  ctx.fillText(label, width - 14, row1);
 
+  const resetLabel = "reset";
+  ctx.fillStyle = "#4a5568";
+  ctx.fillText(resetLabel, width - 14, row1);
   // Generous tap target around the label — 13px text is far too small to hit.
-  const textWidth = ctx.measureText(label).width;
-  resetButton = { x: width - 14 - textWidth - 12, y: 0, w: textWidth + 26, h: HUD_HEIGHT };
+  const resetWidth = ctx.measureText(resetLabel).width;
+  resetButton = { x: width - 14 - resetWidth - 12, y: 0, w: resetWidth + 26, h: HUD_HEIGHT };
+
+  const editLabel = editMode ? "done" : "edit";
+  ctx.fillStyle = editMode ? "#5eead4" : "#4a5568";
+  const editRight = resetButton.x - 6;
+  ctx.fillText(editLabel, editRight, row1);
+  const editWidth = ctx.measureText(editLabel).width;
+  editButton = { x: editRight - editWidth - 12, y: 0, w: editWidth + 24, h: HUD_HEIGHT };
 }
 
 function drawOutcome() {
@@ -311,7 +382,9 @@ function render(now) {
 
   for (const cell of world.cells) drawCell(cell, now);
   drawHud();
-  if (outcome) drawOutcome();
+  // Not while editing — the outcome screen would otherwise block the board
+  // you're trying to click, and edit mode always ends in a reset anyway.
+  if (outcome && !editMode) drawOutcome();
 }
 
 // --- Loop -------------------------------------------------------------------

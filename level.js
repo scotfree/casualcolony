@@ -15,7 +15,7 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid, energyBudget, completionGoal, attenuation } = data;
+  const { name, size, legend, grid, energyBudget, completionGoal, attenuation, powerPlantBoost } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -83,15 +83,25 @@ export function parseLevel(data) {
   if (typeof resolvedAttenuation !== "number" || resolvedAttenuation < 0) {
     throw new Error("Level's attenuation must be a non-negative number");
   }
+  // Optional, same reasoning as attenuation: a building-specific number that
+  // varies per level rather than being fixed in the building table.
+  const resolvedPowerPlantBoost = powerPlantBoost === undefined ? 5 : powerPlantBoost;
+  if (typeof resolvedPowerPlantBoost !== "number" || resolvedPowerPlantBoost < 0) {
+    throw new Error("Level's powerPlantBoost must be a non-negative number");
+  }
 
   return {
     name: name || "Untitled",
     width: size.width,
     height: size.height,
     cells,
+    // Kept around (not just consumed above) so tools like the level editor
+    // can know which building types this level's author actually chose.
+    legend,
     energyBudget,
     completionGoal,
     attenuation: resolvedAttenuation,
+    powerPlantBoost: resolvedPowerPlantBoost,
     // Mutable: energy spent tapping cells. Reset to energyBudget to replay.
     energy: energyBudget,
   };

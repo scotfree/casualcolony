@@ -294,14 +294,18 @@ power plant directly and its neighbours receive 1 (tap) + 5 (boost) − 1
 freely. A second power plant encountered along the way re-boosts whatever
 signal is left when it activates, extending the chain further still.
 
-This is a fixed property on the building (`boost: 5` in `buildings.js`), not
-something a level can retune — deliberately asymmetric with `attenuation`,
-which lives in the level file. Attenuation is a property of the *level's
-physics* (how costly is a hop, here); boost is a property of *what a specific
-tile does*, no different in kind from a crystal's color or axis, which are
-also fixed in code. If a level ever needs a different boost, that's a new
-building type, the same way red and green are new types rather than a
-parameter on crystal.
+Boost amount lives in the level file too, the same as attenuation —
+`powerPlantBoost`, defaulting to 5 if omitted. (First cut had this as a fixed
+`boost: 5` on the building, deliberately asymmetric with attenuation on the
+theory that boost is "what a tile does" and belongs in code, not a level
+parameter — but there was no real reason a level shouldn't get to tune both
+knobs, so it moved.) The building table still only holds a *reference* to
+where its boost lives: `boostKey: "powerPlantBoost"` on the power plant
+entry, and `cascade.js` looks up `world[building.boostKey]`. That indirection
+means a future second booster type can point at its own level field without
+`cascade.js` ever needing to know building ids by name — it stays generic
+over "does this building have a boostKey," not "is this building a power
+plant."
 
 **Consequence for level design:** a crystal cluster is no longer inherently
 valuable — only a cluster *reachable from a power plant* is. The shipped
@@ -325,6 +329,45 @@ power plant alone reaches 16 of 140 cells (11%); one more ordinary tap
 reaches 17 (12.1%), just clearing the goal with two energy still spare for a
 wrong guess or two.
 
+## Milestone 4 — Level editor
+
+A toggle, next to reset in the HUD, that turns tapping-to-play into
+tapping-to-retype. In edit mode, tapping a cell opens a picker listing every
+building type in *this level's own legend* (not the whole `BUILDINGS` table —
+a level about crystals shouldn't offer you buildings it never declared), with
+the cell's current type highlighted. Picking a different one changes that
+cell on the spot. Toggling edit mode back off restarts the level in normal
+play — full energy, nothing activated — but keeps every edit made, so the
+point of editing is to then play the level you just changed, not just to
+preview it.
+
+**The picker is a plain DOM modal, not canvas UI.** Everything else in this
+game is canvas-drawn, but a list of clickable, labeled options with a
+selected state is exactly what HTML buttons already are — hand-rolling that
+in canvas would mean reimplementing hit-testing, focus, and text layout for
+no benefit. `index.html` gets a `#tile-picker` overlay (hidden by default)
+and `game.js` populates it with real `<button>` elements built from
+`BUILDINGS`, one per legend type, each showing a small color swatch (its
+`lit`, `icon`, or `fill`, whichever exists) next to its name. This is the
+first departure from "everything is canvas" in the whole project, and it's a
+narrow, deliberate one — the picker doesn't touch game state directly, it
+just calls back into the same `cell.type = ...` assignment editing would use
+regardless of how the UI were built.
+
+**Why the legend, not the full building table:** `parseLevel` now keeps the
+level's `legend` (character → type id) on the returned world object
+specifically so the editor has something scoped to ask. This also means the
+picker doubles as a legend viewer — if a level uses five types, editing shows
+exactly those five, in the order the level file declared them.
+
+**What editing doesn't do:** touch `energyBudget`, `completionGoal`,
+`attenuation`, or `powerPlantBoost`. Only tile types change. Those four are
+level physics, set once at authoring time; retuning them live isn't part of
+what "edit" means here, and conflating the two would make it much harder to
+tell whether a level felt different because of a layout change or a rules
+change. If level-wide tuning ever needs its own UI, that's a separate
+control, not an extension of the tile picker.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -337,7 +380,9 @@ wrong guess or two.
 | Energy costs 1 per tap, not per cell lit | Rewards finding big connected clusters instead of counting cells |
 | Completion goal is a fraction of the whole board | Ties level design directly to crystal density instead of a second hidden number |
 | Signal attenuates per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
-| Boost is a fixed per-building constant; attenuation lives in the level file | Boost is what a tile *is* (fixed in code, like color or axis); attenuation is level physics (varies per level, like energy budget) |
+| Boost lives in the level file, referenced from the building via `boostKey` | Same level-tunable status as attenuation, without `cascade.js` needing to know building ids by name |
+| Tile picker is a DOM modal, not canvas-drawn | Buttons with labels and a selected state are what HTML already does well; no reason to reimplement that in canvas |
+| Editor scoped to the level's own legend, and only edits tile types | Keeps the picker relevant per-level and keeps "layout change" separate from "rules change" (energy/goal/attenuation/boost) |
 
 ## Open questions
 
@@ -345,8 +390,13 @@ wrong guess or two.
   fraction of all cells activated, checked once at game over. Spatial /
   contiguous-territory measures are still open.)*
 - Do buildings ever deactivate?
-- Are levels hand-authored, or generated offline and then curated?
+- Are levels hand-authored, or generated offline and then curated? *(The
+  editor makes hand-authoring interactive — still no offline generation.)*
 - Does the player ever *place* buildings, or only activate what's there?
+  *(Now: yes, but only in the separate edit mode, not as a move within a
+  normal run — retyping a tile costs no energy and isn't part of the puzzle
+  being solved. Placement as a real gameplay mechanic, spent from the energy
+  budget mid-run, is still open.)*
 - Where does energy come from at the start of a level — fixed budget, or seeded
   by a starting building? *(Now: a fixed `energyBudget` per level.)*
 
@@ -355,4 +405,6 @@ wrong guess or two.
 - Real-time ticking of any kind
 - Save/load or progression between levels
 - Sound
-- Building placement or construction
+- Building placement as a *gameplay* mechanic (spent from the energy budget,
+  part of a run) — the level editor added authoring-time placement, which is
+  a different thing: it happens outside a run and costs nothing
