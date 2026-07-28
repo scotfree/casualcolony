@@ -109,6 +109,24 @@ body {
   flex: none;
 }
 
+/* One row per building type in the legend popup (game.js's openLegend) —
+   the swatch there is a live <canvas>, painted with the same paintTile()
+   the board itself uses, not a flat color square, so the legend always
+   matches what's actually on screen. */
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #c7d3de;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.legend-swatch {
+  border-radius: 8px;
+  flex: none;
+}
+
 .modal-input {
   background: #12161c;
   border: 1px solid #2a3441;

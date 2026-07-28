@@ -495,6 +495,41 @@ surplus still on the HUD. `energyBudget` on a colony level is better read as
 "how much runway to survive an early mistake," not "how many total taps this
 run gets."
 
+## Milestone 7 — Icon shapes, and a legend
+
+With eight tile-owning building types on the board at once (Milestone 6 added
+three more to the original five), "every tile is a colored diamond" stopped
+being enough to tell them apart at a glance — color alone was carrying all
+the weight. Each building now draws its own glyph — crystal a plus, power
+plant a lightning bolt, residential a person outline, farm a leaf, mine a
+dollar sign, drain an ×, desert nothing — so shape and color both identify a
+type, redundantly.
+
+**The icon is always at full brightness; activation moved to the frame.**
+Previously a tile's gem was dim (`dormant`) until tapped, then switched to a
+brighter `lit` color — meaning a tile's *type* was hardest to read exactly
+when it hadn't been tapped yet, which is backwards. Now the icon color never
+changes; only the tile's border (a color and width that ease toward the
+type's `glow` color) and its background fill (easing toward a brighter
+`activeFill`) change with activation. `paintTile` (`game.js`) takes an
+`activeAmount` 0..1 and drives exactly those two things — the icon draw call
+is identical regardless. "What is this" and "is it active" are back to being
+two separate questions with two separate answers, not one dimmer switch
+answering both.
+
+**`paintTile` is shared, not duplicated.** The board (`drawCell`) and the new
+legend popup both call it, so the legend can never drift out of sync with
+what a tile actually looks like on screen — there's no second, hand-copied
+rendering path to keep matching by hand.
+
+**A legend button, because eight types is too many to hold in your head.**
+The HUD gained a third button (`legend`, next to `edit`/`retry`) that opens
+the same shared modal the tile picker and level picker already use (Milestone
+4), with its own content: one row per building, each with a live canvas
+swatch (via `paintTile`, at full activation) and its name. Desert is the one
+exception shown at rest — it never activates, so `paintTile` would otherwise
+be asked for a glow color it doesn't have.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -516,6 +551,7 @@ run gets."
 | Colony economy (population/food/mining) is derived from board state every tap, not tracked as counters | Same "derive, don't track" shape as the activated fraction; can't drift from what's actually on the board |
 | Residential culling is free and ungated, the one exception to "everything costs 1 energy" | A paid or gated cull can permanently lock a starving colony that ran out of energy on the same tap that starved it |
 | Outcome resolves on board exhaustion as well as energy hitting 0 | Mining income can make energy climb instead of drain, so "energy hits 0" alone can never trigger for a self-sustaining colony |
+| A building's icon shape/color is constant; only the frame and background change with activation | With the dormant/lit-gem approach, type was hardest to read on an untapped tile — exactly backwards |
 
 ## Open questions
 

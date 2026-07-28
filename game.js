@@ -8,7 +8,7 @@ import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.9.0";
+const VERSION = "0.10.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -51,6 +51,7 @@ let originX = 0;
 let originY = 0;
 let resetButton = null;
 let editButton = null;
+let legendButton = null;
 
 // One modal, reused for the tile picker, the level picker, and the
 // save-as-new name prompt — see style.css for why it's plain DOM.
@@ -169,7 +170,7 @@ function openTilePicker(cell) {
     const building = BUILDINGS[typeId];
     const button = document.createElement("button");
     button.className = "option" + (typeId === cell.type ? " selected" : "");
-    const swatchColor = building.lit || building.icon || building.fill;
+    const swatchColor = building.iconColor || building.fill;
     button.innerHTML =
       `<span class="swatch" style="background:${swatchColor}"></span>${building.name}`;
     button.addEventListener("click", () => selectType(typeId));
@@ -202,6 +203,45 @@ function openLevelPicker() {
       closeModal();
     });
     modalPanel.appendChild(button);
+  }
+  modal.classList.remove("hidden");
+}
+
+// Every building type, shown exactly as it renders on the board (same
+// paintTile the main canvas uses, at full "active" brightness so the icon
+// and its frame both read clearly) — the reference for what each shape and
+// color means, available any time via the HUD's legend button.
+function openLegend() {
+  modalPanel.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "modal-title";
+  title.textContent = "tile key";
+  modalPanel.appendChild(title);
+
+  const dpr = window.devicePixelRatio || 1;
+  const size = 34;
+  for (const building of Object.values(BUILDINGS)) {
+    const row = document.createElement("div");
+    row.className = "legend-row";
+
+    const swatch = document.createElement("canvas");
+    swatch.className = "legend-swatch";
+    swatch.width = size * dpr;
+    swatch.height = size * dpr;
+    swatch.style.width = size + "px";
+    swatch.style.height = size + "px";
+    const swatchCtx = swatch.getContext("2d");
+    swatchCtx.scale(dpr, dpr);
+    // Full brightness for anything that actually can light up; desert never
+    // does, so it's shown the one way it ever really looks.
+    paintTile(swatchCtx, size, building, building.glow ? 1 : 0);
+    row.appendChild(swatch);
+
+    const label = document.createElement("span");
+    label.textContent = building.name;
+    row.appendChild(label);
+
+    modalPanel.appendChild(row);
   }
   modal.classList.remove("hidden");
 }
@@ -258,6 +298,11 @@ modalPanel.addEventListener("click", (event) => event.stopPropagation());
 
 canvas.addEventListener("pointerdown", (event) => {
   if (!world) return;
+
+  if (hitsButton(legendButton, event.clientX, event.clientY)) {
+    openLegend();
+    return;
+  }
 
   if (hitsButton(editButton, event.clientX, event.clientY)) {
     if (editMode) {
@@ -354,15 +399,118 @@ function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function drawDiamond(cx, cy, gem) {
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - gem);
-  ctx.lineTo(cx + gem, cy);
-  ctx.lineTo(cx, cy + gem);
-  ctx.lineTo(cx - gem, cy);
-  ctx.closePath();
-  ctx.fill();
+// Linearly interpolates between two "#rrggbb" colors — canvas has no CSS
+// transitions, so easing a fill or stroke color means doing this by hand.
+function lerpColor(hexA, hexB, t) {
+  const a = parseInt(hexA.slice(1), 16);
+  const b = parseInt(hexB.slice(1), 16);
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
 }
+
+// --- Icon glyphs --------------------------------------------------------
+// One shape per building "family" (see buildings.js's `shape`), each drawn
+// centered at (cx, cy) inside a roughly 2r-wide box. These draw at constant
+// full brightness regardless of activation — see paintTile — so a tile's
+// *type* is always legible; only the frame and background around them
+// change with state.
+
+function drawPlus(targetCtx, cx, cy, r) {
+  const arm = r * 0.62;
+  const thick = r * 0.44;
+  targetCtx.beginPath();
+  targetCtx.moveTo(cx - thick, cy - arm);
+  targetCtx.lineTo(cx + thick, cy - arm);
+  targetCtx.lineTo(cx + thick, cy - thick);
+  targetCtx.lineTo(cx + arm, cy - thick);
+  targetCtx.lineTo(cx + arm, cy + thick);
+  targetCtx.lineTo(cx + thick, cy + thick);
+  targetCtx.lineTo(cx + thick, cy + arm);
+  targetCtx.lineTo(cx - thick, cy + arm);
+  targetCtx.lineTo(cx - thick, cy + thick);
+  targetCtx.lineTo(cx - arm, cy + thick);
+  targetCtx.lineTo(cx - arm, cy - thick);
+  targetCtx.lineTo(cx - thick, cy - thick);
+  targetCtx.closePath();
+  targetCtx.fill();
+}
+
+// Classic lightning-bolt zigzag, normalized to roughly [-0.75, 0.83] and
+// scaled by r.
+const BOLT_POINTS = [
+  [0.083, -0.833], [-0.75, 0.167], [-0.25, 0.167],
+  [-0.333, 0.833], [0.5, -0.333], [0, -0.333],
+];
+function drawBolt(targetCtx, cx, cy, r) {
+  targetCtx.beginPath();
+  BOLT_POINTS.forEach(([px, py], i) => {
+    const x = cx + px * r;
+    const y = cy + py * r;
+    if (i === 0) targetCtx.moveTo(x, y);
+    else targetCtx.lineTo(x, y);
+  });
+  targetCtx.closePath();
+  targetCtx.fill();
+}
+
+// A head (stroked circle) over shoulders (the top half of a larger circle,
+// left open) — deliberately an outline, not a filled silhouette.
+function drawPerson(targetCtx, cx, cy, r) {
+  targetCtx.lineWidth = Math.max(1.4, r * 0.24);
+  targetCtx.lineCap = "round";
+  targetCtx.beginPath();
+  targetCtx.arc(cx, cy - r * 0.4, r * 0.32, 0, Math.PI * 2);
+  targetCtx.stroke();
+  targetCtx.beginPath();
+  targetCtx.arc(cx, cy + r * 0.95, r * 0.62, Math.PI, Math.PI * 2);
+  targetCtx.stroke();
+}
+
+// Same trick as a diamond gem, but with only two opposite corners rounded
+// instead of all four — a square with one pair of corners left sharp reads
+// as a leaf (or petal) once rotated 45°.
+function drawLeaf(targetCtx, cx, cy, r) {
+  const w = r * 1.3;
+  targetCtx.save();
+  targetCtx.translate(cx, cy);
+  targetCtx.rotate(Math.PI / 4);
+  targetCtx.beginPath();
+  targetCtx.roundRect(-w / 2, -w / 2, w, w, [w / 2, 0, w / 2, 0]);
+  targetCtx.fill();
+  targetCtx.restore();
+}
+
+function drawDollar(targetCtx, cx, cy, r) {
+  targetCtx.font = `800 ${Math.round(r * 1.7)}px ui-monospace, monospace`;
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  targetCtx.fillText("$", cx, cy + r * 0.05);
+}
+
+function drawX(targetCtx, cx, cy, r) {
+  const a = r * 0.62;
+  targetCtx.lineWidth = Math.max(1.6, r * 0.26);
+  targetCtx.lineCap = "round";
+  targetCtx.beginPath();
+  targetCtx.moveTo(cx - a, cy - a);
+  targetCtx.lineTo(cx + a, cy + a);
+  targetCtx.moveTo(cx + a, cy - a);
+  targetCtx.lineTo(cx - a, cy + a);
+  targetCtx.stroke();
+}
+
+const ICON_SHAPES = {
+  plus: drawPlus,
+  bolt: drawBolt,
+  person: drawPerson,
+  leaf: drawLeaf,
+  dollar: drawDollar,
+  x: drawX,
+};
 
 // Whether any inactive cell would still do something if tapped: light a
 // cascade, or clear something as a drain. Ignores residential's free toggle
@@ -396,58 +544,62 @@ function updateOutcome(now) {
   outcome = fraction >= world.completionGoal ? "win" : "lose";
 }
 
+// Paints one tile — background, frame, and icon — into any 2D context at
+// (0, 0)–(size, size). Shared by the main board (drawCell, below) and the
+// legend popup (openLegend), so the legend always shows the exact same
+// rendering a player sees on the board, never a hand-approximated copy.
+//
+// activeAmount is 0..1: how "on" this tile currently reads. It drives the
+// frame (a brighter, thicker border with a glow) and a brightened
+// background fill — the *only* two things activation changes. The icon
+// itself is drawn at constant full brightness regardless, on purpose: type
+// should always be legible, whether or not the tile has been tapped yet.
+function paintTile(targetCtx, size, building, activeAmount) {
+  const pad = Math.max(1, Math.round(size * 0.06));
+  const inner = size - pad * 2;
+  const radius = Math.round(size * 0.2);
+  const cx = size / 2;
+  const cy = size / 2;
+  const eased = easeOutCubic(activeAmount);
+
+  targetCtx.fillStyle =
+    building.activeFill && activeAmount > 0
+      ? lerpColor(building.fill, building.activeFill, eased)
+      : building.fill;
+  targetCtx.strokeStyle = activeAmount > 0 ? lerpColor(building.stroke, building.glow, eased) : building.stroke;
+  targetCtx.lineWidth = activeAmount > 0 ? 1 + eased : 1;
+  targetCtx.beginPath();
+  targetCtx.roundRect(pad, pad, inner, inner, radius);
+  targetCtx.fill();
+  if (activeAmount > 0) {
+    targetCtx.shadowColor = building.glow;
+    targetCtx.shadowBlur = 16 * eased;
+  }
+  targetCtx.stroke();
+  targetCtx.shadowBlur = 0;
+
+  const draw = ICON_SHAPES[building.shape];
+  if (!draw) return; // desert: no icon at all
+
+  targetCtx.fillStyle = building.iconColor;
+  targetCtx.strokeStyle = building.iconColor;
+  draw(targetCtx, cx, cy, inner * 0.27);
+}
+
 function drawCell(cell, now) {
   const building = buildingFor(cell);
   const x = originX + cell.x * cellSize;
   const y = originY + cell.y * cellSize;
-  const pad = Math.max(1, Math.round(cellSize * 0.06));
-  const size = cellSize - pad * 2;
-  const radius = Math.round(cellSize * 0.18);
+  // A drain never activates itself, but still flashes briefly the moment it
+  // fires (drainPulse), so tapping one reads as "this did something" even
+  // before its neighbour visibly goes dark. Everything else uses ordinary
+  // lit progress.
+  const t = building.drain ? drainPulse(cell, now) : litProgress(cell, now);
 
-  ctx.fillStyle = building.fill;
-  ctx.strokeStyle = building.stroke;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(x + pad, y + pad, size, size, radius);
-  ctx.fill();
-  ctx.stroke();
-
-  const cx = x + cellSize / 2;
-  const cy = y + cellSize / 2;
-
-  // A static marker gem for buildings with no on/off state of their own
-  // (drain): always visible at a fixed size, with a brief brighter pulse
-  // the moment it actually does something.
-  if (building.icon) {
-    const pulse = drainPulse(cell, now);
-    const gem = size * 0.44 * (1 + Math.sin(pulse * Math.PI) * 0.14);
-    if (pulse > 0) {
-      ctx.shadowColor = building.glow;
-      ctx.shadowBlur = 18 * pulse;
-    }
-    ctx.fillStyle = building.icon;
-    drawDiamond(cx, cy, gem);
-    ctx.shadowBlur = 0;
-    return;
-  }
-
-  if (building.inert) return;
-
-  const t = litProgress(cell, now);
-  const eased = easeOutCubic(t);
-  // Swell past full size and settle back, so a cascade reads as a series of
-  // small pops rather than a wave of colour.
-  const pop = Math.sin(eased * Math.PI) * 0.14;
-  const scale = (0.55 + 0.45 * eased) * (1 + pop);
-  const gem = size * 0.44 * scale;
-
-  if (t > 0) {
-    ctx.shadowColor = building.glow;
-    ctx.shadowBlur = 18 * eased;
-  }
-  ctx.fillStyle = t > 0 ? building.lit : building.dormant;
-  drawDiamond(cx, cy, gem);
-  ctx.shadowBlur = 0;
+  ctx.save();
+  ctx.translate(x, y);
+  paintTile(ctx, cellSize, building, t);
+  ctx.restore();
 }
 
 function drawHud() {
@@ -486,19 +638,31 @@ function drawHud() {
 
   ctx.textAlign = "right";
 
+  // Brighter than plain body text, same as the modal's own option labels
+  // (style.css's .option) — a tappable button should never read as dimmer
+  // than static text.
+  const buttonColor = "#c7d3de";
+
   const resetLabel = editMode ? "save as" : "retry";
-  ctx.fillStyle = "#4a5568";
+  ctx.fillStyle = buttonColor;
   ctx.fillText(resetLabel, width - 14, row1);
   // Generous tap target around the label — 13px text is far too small to hit.
   const resetWidth = ctx.measureText(resetLabel).width;
   resetButton = { x: width - 14 - resetWidth - 12, y: 0, w: resetWidth + 26, h: HUD_HEIGHT };
 
   const editLabel = editMode ? "restart" : "edit";
-  ctx.fillStyle = editMode ? "#5eead4" : "#4a5568";
+  ctx.fillStyle = editMode ? "#5eead4" : buttonColor;
   const editRight = resetButton.x - 6;
   ctx.fillText(editLabel, editRight, row1);
   const editWidth = ctx.measureText(editLabel).width;
   editButton = { x: editRight - editWidth - 12, y: 0, w: editWidth + 24, h: HUD_HEIGHT };
+
+  const legendLabel = "legend";
+  ctx.fillStyle = buttonColor;
+  const legendRight = editButton.x - 6;
+  ctx.fillText(legendLabel, legendRight, row1);
+  const legendWidth = ctx.measureText(legendLabel).width;
+  legendButton = { x: legendRight - legendWidth - 12, y: 0, w: legendWidth + 24, h: HUD_HEIGHT };
 }
 
 function drawOutcome() {
