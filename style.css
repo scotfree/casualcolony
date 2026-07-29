@@ -45,6 +45,33 @@ body {
   pointer-events: none;
 }
 
+/* Opposite corner from #version, and actually tappable — opens the
+   player's manual (a separate page, not a modal, so it's a real link) in a
+   new tab, leaving the current run untouched. */
+#manual-link {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  left: calc(env(safe-area-inset-left) + 10px);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid #3a4a5c;
+  color: #c7d3de;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+#manual-link:hover,
+#manual-link:focus-visible {
+  border-color: #5eead4;
+  color: #5eead4;
+  outline: none;
+}
+
 /* One generic modal, reused for the tile picker, the level picker and the
    save-as-new name prompt — a plain DOM overlay rather than hand-rolled
    canvas UI, since these are just buttons and a text field, and the browser

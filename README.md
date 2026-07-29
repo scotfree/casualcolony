@@ -1,3 +1,3 @@
 # casualcolony
 
-[Player's manual](./manual.html)
+[Player's manual](https://scotfree.github.io/casualcolony/manual.html)
