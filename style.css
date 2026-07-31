@@ -133,6 +133,7 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 4px;
+  border: 1px solid #3a4a5c;
   flex: none;
 }
 
@@ -151,6 +152,12 @@ body {
 
 .legend-swatch {
   border-radius: 8px;
+  /* Desert paints almost the same dark as the modal panel behind it —
+     without this, its row is there but effectively invisible. An outline
+     (not a border, so it doesn't shift the canvas's drawn pixels) fixes it
+     for every type, not just desert. */
+  outline: 1px solid #3a4a5c;
+  outline-offset: -1px;
   flex: none;
 }
 
