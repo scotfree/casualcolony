@@ -110,7 +110,17 @@ body {
   padding: 4px 8px 8px;
 }
 
+/* Each building type is a row: the selectable option (type + live swatch)
+   plus a separate pencil button that opens its icon editor — two different
+   actions on two different targets, not one overloaded tap. */
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .option {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -130,11 +140,36 @@ body {
 }
 
 .option .swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  border: 1px solid #3a4a5c;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  /* Desert (and any other dark-on-dark type) paints almost the same color
+     as the modal panel behind it — an outline keeps every swatch visible
+     regardless of how dark its own fill is. */
+  outline: 1px solid #3a4a5c;
+  outline-offset: -1px;
   flex: none;
+}
+
+.edit-icon-btn {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #2a3441;
+  border-radius: 8px;
+  color: #6b7f91;
+  font-size: 14px;
+}
+
+.edit-icon-btn:hover,
+.edit-icon-btn:focus-visible {
+  border-color: #5eead4;
+  color: #5eead4;
+  outline: none;
 }
 
 /* One row per building type in the legend popup (game.js's openLegend) —
@@ -159,6 +194,32 @@ body {
   outline: 1px solid #3a4a5c;
   outline-offset: -1px;
   flex: none;
+}
+
+/* The custom icon editor (game.js's openTileEditor): a grid of togglable
+   squares, one per pixel of ICON_GRID_SIZE. --pixel-color is set per-type
+   inline, inherited down from .pixel-grid to every .pixel.on. */
+.pixel-grid {
+  display: grid;
+  gap: 2px;
+  width: 260px;
+  max-width: 78vw;
+  margin: 6px auto 10px;
+  padding: 8px;
+  background: #12161c;
+  border: 1px solid #2a3441;
+  border-radius: 8px;
+}
+
+.pixel {
+  aspect-ratio: 1 / 1;
+  background: #1f2530;
+  border-radius: 2px;
+  touch-action: manipulation;
+}
+
+.pixel.on {
+  background: var(--pixel-color, #5eead4);
 }
 
 .modal-input {

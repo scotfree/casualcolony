@@ -2,13 +2,13 @@
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
 import { loadLevelSet, parseLevel, serializeLevel } from "./level.js";
-import { loadSavedLevels, saveLevel } from "./storage.js";
+import { loadSavedLevels, saveLevel, loadIconOverrides, saveIconOverride } from "./storage.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -34,6 +34,17 @@ let editMode = false;
 // localStorage, merged by name (a saved name shadows a shipped one with the
 // same name). Raw records, not parsed worlds — see loadLevelByRecord.
 let levelList = [];
+
+// Custom-drawn icons, keyed by building type id, loaded once up front (a
+// synchronous localStorage read, unlike the level set) so even the very
+// first frame reflects anything already saved. { [typeId]: string[] } — see
+// storage.js.
+let iconOverrides = loadIconOverrides();
+
+// Pixel resolution of the custom icon editor (openTileEditor) — a type's
+// custom icon is always this many rows/columns, regardless of how big it's
+// later drawn.
+const ICON_GRID_SIZE = 10;
 
 // Whether any remaining tap could still change the board — recomputed after
 // every successful tap (see applyColonyTick), not every frame, since taps
@@ -170,15 +181,96 @@ function saveAsNew(name) {
 function openTilePicker(cell) {
   pickerCell = cell;
   modalPanel.innerHTML = "";
+  const dpr = window.devicePixelRatio || 1;
+  const swatchSize = 26;
   for (const building of Object.values(BUILDINGS)) {
+    const row = document.createElement("div");
+    row.className = "option-row";
+
     const button = document.createElement("button");
     button.className = "option" + (building.id === cell.type ? " selected" : "");
-    const swatchColor = building.iconColor || building.fill;
-    button.innerHTML =
-      `<span class="swatch" style="background:${swatchColor}"></span>${building.name}`;
+
+    // A live swatch (paintTile, same as the board and the legend), not a
+    // flat color square — otherwise a custom icon saved in the editor below
+    // would have nothing to show for itself back here.
+    const swatch = document.createElement("canvas");
+    swatch.className = "swatch";
+    swatch.width = swatchSize * dpr;
+    swatch.height = swatchSize * dpr;
+    swatch.style.width = swatchSize + "px";
+    swatch.style.height = swatchSize + "px";
+    const swatchCtx = swatch.getContext("2d");
+    swatchCtx.scale(dpr, dpr);
+    paintTile(swatchCtx, swatchSize, building, building.glow ? 1 : 0);
+    button.appendChild(swatch);
+
+    const label = document.createElement("span");
+    label.textContent = building.name;
+    button.appendChild(label);
+
     button.addEventListener("click", () => selectType(building.id));
-    modalPanel.appendChild(button);
+    row.appendChild(button);
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "edit-icon-btn";
+    editButton.textContent = "✎"; // pencil
+    editButton.setAttribute("aria-label", `Edit ${building.name}'s icon`);
+    editButton.addEventListener("click", () => openTileEditor(building.id));
+    row.appendChild(editButton);
+
+    modalPanel.appendChild(row);
   }
+  modal.classList.remove("hidden");
+}
+
+// A small pixel-art editor for one building type's icon — opened via the
+// pencil button next to it in the tile picker above. Starts from whatever
+// that type already looks like (its saved custom icon if it has one,
+// otherwise its default vector shape rasterized down to the grid), so
+// editing never starts from a blank square. Tapping a pixel just flips it;
+// "save" persists the result (storage.js) and reopens the tile picker for
+// the same cell, so the change is immediately visible where it matters.
+function openTileEditor(typeId) {
+  const building = BUILDINGS[typeId];
+  const startRows = iconOverrides[typeId] || rasterizeIcon(building.shape);
+  const rows = startRows.map((row) => row.split(""));
+
+  modalPanel.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "modal-title";
+  title.textContent = `edit ${building.name}`;
+  modalPanel.appendChild(title);
+
+  const gridEl = document.createElement("div");
+  gridEl.className = "pixel-grid";
+  gridEl.style.gridTemplateColumns = `repeat(${ICON_GRID_SIZE}, 1fr)`;
+  gridEl.style.setProperty("--pixel-color", building.iconColor || "#c7d3de");
+
+  for (let y = 0; y < ICON_GRID_SIZE; y++) {
+    for (let x = 0; x < ICON_GRID_SIZE; x++) {
+      const pixel = document.createElement("div");
+      pixel.className = "pixel" + (rows[y][x] === "#" ? " on" : "");
+      pixel.addEventListener("pointerdown", () => {
+        rows[y][x] = rows[y][x] === "#" ? "." : "#";
+        pixel.classList.toggle("on", rows[y][x] === "#");
+      });
+      gridEl.appendChild(pixel);
+    }
+  }
+  modalPanel.appendChild(gridEl);
+
+  const save = document.createElement("button");
+  save.className = "modal-save";
+  save.textContent = "save";
+  save.addEventListener("click", () => {
+    const record = rows.map((row) => row.join(""));
+    iconOverrides[typeId] = record;
+    saveIconOverride(typeId, record);
+    openTilePicker(pickerCell);
+  });
+  modalPanel.appendChild(save);
+
   modal.classList.remove("hidden");
 }
 
@@ -539,6 +631,67 @@ const ICON_SHAPES = {
   x: drawX,
 };
 
+// Draws a custom icon (an ICON_GRID_SIZE-row array of "#"/"." strings — see
+// storage.js) the same way the vector shapes draw: centered at (cx, cy),
+// sized off r. Filled squares tile a box roughly the same footprint as the
+// vector icons' own reach, so swapping between a default shape and a custom
+// one doesn't change a tile's apparent icon size.
+function drawBitmapIcon(targetCtx, cx, cy, r, rows) {
+  const n = rows.length;
+  const boxSide = r * 2.3;
+  const cell = boxSide / n;
+  const startX = cx - boxSide / 2;
+  const startY = cy - boxSide / 2;
+  for (let gy = 0; gy < n; gy++) {
+    const row = rows[gy];
+    for (let gx = 0; gx < row.length; gx++) {
+      if (row[gx] !== "#") continue;
+      // Slightly overpainted so adjacent "on" pixels don't leave hairline
+      // gaps between them from sub-pixel rounding.
+      targetCtx.fillRect(startX + gx * cell, startY + gy * cell, cell + 0.6, cell + 0.6);
+    }
+  }
+}
+
+// What a type's icon editor (openTileEditor) opens with when that type has
+// never been customized: its default vector shape, rendered oversized onto
+// an offscreen canvas and then sampled down into an ICON_GRID_SIZE grid, so
+// editing starts from what the type already looks like rather than a blank
+// square. Desert (no shape) starts blank, which is exactly its real icon.
+function rasterizeIcon(shape) {
+  const draw = ICON_SHAPES[shape];
+  if (!draw) return Array.from({ length: ICON_GRID_SIZE }, () => ".".repeat(ICON_GRID_SIZE));
+
+  const scale = 20; // offscreen px per grid cell — coarse shapes still sample cleanly
+  const size = ICON_GRID_SIZE * scale;
+  const off = document.createElement("canvas");
+  off.width = size;
+  off.height = size;
+  const offCtx = off.getContext("2d");
+  offCtx.fillStyle = "#fff";
+  offCtx.strokeStyle = "#fff";
+  draw(offCtx, size / 2, size / 2, size * 0.27);
+
+  const { data } = offCtx.getImageData(0, 0, size, size);
+  const rows = [];
+  for (let gy = 0; gy < ICON_GRID_SIZE; gy++) {
+    let row = "";
+    for (let gx = 0; gx < ICON_GRID_SIZE; gx++) {
+      let covered = 0;
+      for (let py = 0; py < scale; py++) {
+        for (let px = 0; px < scale; px++) {
+          const x = gx * scale + px;
+          const y = gy * scale + py;
+          if (data[(y * size + x) * 4 + 3] > 40) covered++;
+        }
+      }
+      row += covered / (scale * scale) > 0.25 ? "#" : ".";
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 // Whether any inactive cell would still do something if tapped: light a
 // cascade, or clear something as a drain. Ignores residential's free toggle
 // cull — it's reversible and costs nothing, so its mere availability
@@ -604,6 +757,13 @@ function paintTile(targetCtx, size, building, activeAmount) {
   }
   targetCtx.stroke();
   targetCtx.shadowBlur = 0;
+
+  const override = iconOverrides[building.id];
+  if (override) {
+    targetCtx.fillStyle = building.iconColor || "#c7d3de";
+    drawBitmapIcon(targetCtx, cx, cy, inner * 0.27, override);
+    return;
+  }
 
   const draw = ICON_SHAPES[building.shape];
   if (!draw) return; // desert: no icon at all

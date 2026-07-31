@@ -535,6 +535,49 @@ swatch (via `paintTile`, at full activation) and its name. Desert is the one
 exception shown at rest — it never activates, so `paintTile` would otherwise
 be asked for a glow color it doesn't have.
 
+## Milestone 8 — A pixel editor for icons
+
+The level editor (Milestone 4) already let a player change what a cell
+*is*; this milestone adds changing what a building type *looks like*. Every
+row in the tile picker gained a pencil button next to it, opening a small
+pixel-art editor: an `ICON_GRID_SIZE`×`ICON_GRID_SIZE` (10×10) grid of
+squares that just toggle on tap, a live preview of exactly what a custom
+icon means (drawn in the type's own `iconColor`), and a `save` button.
+
+**Starts from what the type already looks like, never a blank square.**
+Opening the editor for a type that already has a custom icon loads it
+directly. Opening it for a type that doesn't loads `rasterizeIcon(shape)`
+instead: the type's normal vector icon (`drawPlus`, `drawBolt`, ...) drawn
+oversized onto an offscreen canvas, then sampled down into the grid by
+checking how much of each cell's area the shape covers. Desert has no shape
+at all, so it rasterizes to a blank grid — which is exactly what desert's
+real icon is, so that's correct, not a special case.
+
+**A custom icon belongs to the *type*, not a level or a cell.** `BUILDINGS`
+is a table shared by every level; a custom icon is stored the same way,
+keyed by type id in a new `casualcolony:iconOverrides` localStorage entry
+(`storage.js`), loaded synchronously at startup — unlike level records, an
+icon override has to be ready before the very first frame, not fetched in.
+The consequence: editing "Mine" changes every mine on every level, not just
+the cell you happened to have selected when you opened the editor.
+
+**One more consumer of `paintTile`, not a fork of it.** `paintTile` already
+had one job — draw a tile's frame, background, and icon consistently for
+both the board and the legend (Milestone 7). It now checks
+`iconOverrides[building.id]` before falling back to the vector `ICON_SHAPES`
+table, so a custom icon shows up everywhere a tile ever renders — board,
+legend, and the tile picker's own swatches, which had to stop being flat
+CSS color squares and become live canvases (the same upgrade the legend
+swatch already got) for exactly this reason: a flat swatch has no way to
+show a custom icon, only a custom icon's *color*.
+
+**Why tap-to-toggle and not drag-to-paint:** the editor's whole footprint is
+a single `pointerdown` listener per pixel — no drag-state, no distinguishing
+a tap from the start of a swipe. Good enough for the size of edit this
+supports (a handful of pixels at a time); painting a whole icon by dragging
+is a real usability upgrade but a separate feature, not implied by "toggle
+when touched."
+
 ## Decisions so far
 
 | Decision | Why |
@@ -557,6 +600,7 @@ be asked for a glow color it doesn't have.
 | Residential culling is free and ungated, the one exception to "everything costs 1 energy" | A paid or gated cull can permanently lock a starving colony that ran out of energy on the same tap that starved it |
 | Outcome resolves on board exhaustion as well as energy hitting 0 | Mining income can make energy climb instead of drain, so "energy hits 0" alone can never trigger for a self-sustaining colony |
 | A building's icon shape/color is constant; only the frame and background change with activation | With the dormant/lit-gem approach, type was hardest to read on an untapped tile — exactly backwards |
+| Custom icons are keyed by building type, not level or cell | `BUILDINGS` is already a shared table; a per-type override matches that, and means one edit fixes a type everywhere it's used |
 
 ## Open questions
 
@@ -592,3 +636,8 @@ be asked for a glow color it doesn't have.
   food/energy loop generally enough for more job types to opt in later the
   same way mine did (a capability flag in `buildings.js`), but only mining
   exists so far
+- Drag-to-paint in the icon editor (Milestone 8) — each pixel takes its own
+  tap; painting a stroke across several at once is a real upgrade but a
+  separate feature
+- Resetting a custom icon back to its default shape — once saved, the only
+  way back is to redraw it by hand
