@@ -5,11 +5,18 @@
 // building's propagate rule — but it isn't unlimited. A tap hands the tapped
 // cell one unit of signal; each cell that activates passes along whatever
 // signal it received, plus its own boost (0 for most buildings; a power
-// plant's is world[boostKey], e.g. world.powerPlantBoost), minus this
-// level's attenuation (1 by default). Once that hits zero, the signal is
-// spent and the cascade stops spreading from there — a lone crystal only
-// ever lights itself, and it takes a power plant somewhere in the chain to
-// reach any further.
+// plant's is world[boostKey], e.g. world.powerPlantBoost), minus the
+// activation cost of whatever it's reaching next (buildings.js's
+// activationCost — a property of that neighbour's *type*, not the level:
+// crystal is cheap, a mine is steep). A neighbour that can't cover its own
+// cost simply doesn't activate — the cascade dead-ends there, same as
+// running out of signal entirely.
+//
+// The cell you actually tap is the one exception: it always activates,
+// regardless of cost. That's the certainty spending the energy on a tap
+// buys. Only what's left over after paying its own cost decides how far
+// the cascade reaches beyond it — a lone crystal only ever lights itself,
+// and it takes a power plant somewhere in the chain to reach any further.
 //
 // The BFS *depth* is the useful part: cells at depth 0 light immediately,
 // depth 1 a moment later, and so on. Playing back depth by depth is exactly a
@@ -22,39 +29,50 @@
 
 import { buildingFor } from "./buildings.js";
 
-// What a tap hands the tapped cell. With the default attenuation of 1, this
-// is exactly enough to activate that one cell and nothing more.
+// What a tap hands the tapped cell, before that cell's own activation cost
+// is paid. With the default crystal activationCost of 1, this is exactly
+// enough to activate a lone crystal and nothing more.
 const TAP_SIGNAL = 1;
+
+// activationCost is only meaningful on buildings that can ever be a
+// propagation target (buildings.js's activatable() already keeps desert and
+// drain out of the running); this is just the "no cost defined" fallback.
+function costOf(building) {
+  return building.activationCost ?? 0;
+}
 
 // Returns [{ cell, depth }] in breadth-first order, or [] if this cell can't
 // start a cascade. Pure: it reads the world but changes nothing.
 export function computeCascade(world, start) {
   if (!start) return [];
   if (start.activateAt !== null) return []; // already lit or already scheduled
-  if (buildingFor(start).inert) return [];
+  const startBuilding = buildingFor(start);
+  if (startBuilding.inert) return [];
 
-  const result = [];
+  // The tap itself is unconditional — see the module doc above. What's left
+  // after paying its own cost (plus any boost) is what depth-1 candidates
+  // have to work with.
+  const startBoost = startBuilding.boostKey ? world[startBuilding.boostKey] : 0;
+  const result = [{ cell: start, depth: 0 }];
   const seen = new Set([start]);
-  let frontier = [{ cell: start, signal: TAP_SIGNAL }];
-  let depth = 0;
+  let frontier = [{ cell: start, signal: TAP_SIGNAL - costOf(startBuilding) + startBoost }];
+  let depth = 1;
 
   while (frontier.length > 0) {
-    for (const { cell } of frontier) {
-      result.push({ cell, depth });
-    }
-
     const next = [];
     for (const { cell, signal } of frontier) {
       const building = buildingFor(cell);
       if (!building.propagate) continue;
-      const boost = building.boostKey ? world[building.boostKey] : 0;
-      const outgoing = signal + boost - world.attenuation;
-      if (outgoing <= 0) continue; // signal spent here; nothing passes onward
       for (const neighbour of building.propagate(world, cell)) {
         if (seen.has(neighbour)) continue;
         if (neighbour.activateAt !== null) continue;
+        const nBuilding = buildingFor(neighbour);
+        const cost = costOf(nBuilding);
+        if (signal < cost) continue; // can't afford to activate this one — dead end
         seen.add(neighbour);
-        next.push({ cell: neighbour, signal: outgoing });
+        result.push({ cell: neighbour, depth });
+        const boost = nBuilding.boostKey ? world[nBuilding.boostKey] : 0;
+        next.push({ cell: neighbour, signal: signal - cost + boost });
       }
     }
 

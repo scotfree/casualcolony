@@ -578,6 +578,67 @@ supports (a handful of pixels at a time); painting a whole icon by dragging
 is a real usability upgrade but a separate feature, not implied by "toggle
 when touched."
 
+## Milestone 9 — Activation cost moves to the building, and colony tiles join the cascade
+
+Milestone 6 kept residential/farm/mine deliberately outside the crystal
+signal network — no `propagate`, single-cell activation only, "the colony
+economy isn't part of the crystal signal network." That was right for what
+existed then (colony buildings never touched cascades at all), but it drew
+the line in the wrong place once the question became *why not* let a
+crystal network wake a nearby mine. The real design intent, all along, was
+that propagation exists to trigger working tiles — the crystal-only
+restriction was never load-bearing on its own, it was just the shape the
+code happened to take before colony buildings existed to test it against.
+
+**Activation cost moves from the level to the building type.** Milestone 3's
+`attenuation` was a single number every hop paid, chosen per level. It's
+gone now, replaced by `activationCost` on each building in `buildings.js`:
+crystal/red/green/power plant all cost 1 (cheap — a network can travel far),
+residential/farm cost 2, mine costs 3 (steep — reachable, but it eats most
+of whatever signal is left, so propagation rarely survives past one). This
+is a property of *what* a tile is, the same way `fill` or `iconColor` are,
+not something a level author tunes.
+
+**A neighbour that can't afford to activate is a dead end, not a crash.**
+Previously any positive incoming signal was enough to activate a cell —
+only *further* propagation was gated. Now the target's own `activationCost`
+has to be covered by what's arriving, or it simply doesn't activate; the
+cascade just doesn't extend that way. `buildings.js`'s `activatable()`
+keeps desert and drain out of the running entirely (no `activationCost` —
+they can never be a target), same as before.
+
+**The cell you tap always activates — cost only governs what you didn't
+tap.** This is the rule that keeps everything else working: `TAP_SIGNAL`
+(1) is smaller than every non-crystal type's cost, so if activation were
+gated the same way for a direct tap, tapping a mine or a residential
+wouldn't even light that one tile. Instead the tapped cell is unconditional
+in `cascade.js` (matching the "spending energy on a tap guarantees it
+lights" invariant that's been true since Milestone 2), and only the signal
+*left over* after paying its own cost decides how far the cascade reaches
+beyond it. Concretely: tapping a farm (cost 2) with signal 1 leaves -1 —
+nothing to hand to the residential or mine stacked next to it in
+"recolonized," even though all three can now propagate to each other in
+principle. The level's whole tap-by-tap teaching sequence needed no changes
+at all; verified by re-running its existing tests and the interactive
+Playwright walkthrough unchanged, byte-for-byte the same result as before
+this milestone.
+
+**What actually changed, concretely:** tap a power plant next to a mine
+with enough boost in reach, and the mine now lights up as part of the same
+cascade — confirmed interactively by editing "simple test" to place a mine
+next to its power plant and watching one tap light both, mining income
+included (`resolveColony` doesn't care *how* a cell activated, so this
+needed no changes there at all).
+
+**Testing "unlimited flood" without a level-level knob.** Several existing
+cascade tests deliberately ignored decay to test pure connectivity (does a
+diagonal connect? does an axis restriction hold?) — they used to pass
+`attenuation: 0`. Since cost is no longer level-configurable, `test.html`
+gained `withUnlimitedReach()`, which temporarily zeroes every building's
+`activationCost`, runs the test, and restores it — a test-only seam, not a
+feature real levels can reach for, since no shipped level ever needed a
+custom cost and none does now either.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -589,10 +650,10 @@ when touched."
 | Sandbox before energy | Get the cascade feeling right before adding pressure |
 | Energy costs 1 per tap, not per cell lit | Rewards finding big connected clusters instead of counting cells |
 | Completion goal is a fraction of the whole board | Ties level design directly to crystal density instead of a second hidden number |
-| Signal attenuates per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
-| Boost lives in the level file, referenced from the building via `boostKey` | Same level-tunable status as attenuation, without `cascade.js` needing to know building ids by name |
+| Signal costs activation per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
+| Boost lives in the level file, referenced from the building via `boostKey`; activation cost lives on the building type itself | Boost is a level-design lever ("how far can this reach"); cost is a property of what a tile *is*, the same as its color — different enough knobs that they don't belong in the same place (see Milestone 9) |
 | Tile picker is a DOM modal, not canvas-drawn | Buttons with labels and a selected state are what HTML already does well; no reason to reimplement that in canvas |
-| Editor offers every building type, and only edits tile types | Scoping to the level's own legend stopped working once most levels didn't declare the colony types (see Milestone 7); keeping edits to tile types only still keeps "layout change" separate from "rules change" (energy/goal/attenuation/boost) |
+| Editor offers every building type, and only edits tile types | Scoping to the level's own legend stopped working once most levels didn't declare the colony types (see Milestone 7); keeping edits to tile types only still keeps "layout change" separate from "rules change" (energy/goal/boost) |
 | Levels ship as one JSON array, not one file each | The game can offer a list to pick from without a separate index file to keep in sync |
 | Saved levels live in localStorage, keyed by name, shadowing shipped names | The only persistence a static site can have without a backend; matches "save as current" being "save as [this name]" |
 | `serializeLevel` reuses the level's existing legend rather than inventing characters | Editing can only introduce types already in the legend, so the legend never needs to change |
@@ -601,6 +662,8 @@ when touched."
 | Outcome resolves on board exhaustion as well as energy hitting 0 | Mining income can make energy climb instead of drain, so "energy hits 0" alone can never trigger for a self-sustaining colony |
 | A building's icon shape/color is constant; only the frame and background change with activation | With the dormant/lit-gem approach, type was hardest to read on an untapped tile — exactly backwards |
 | Custom icons are keyed by building type, not level or cell | `BUILDINGS` is already a shared table; a per-type override matches that, and means one edit fixes a type everywhere it's used |
+| Colony buildings propagate and can be reached by crystal networks, gated by their own (steeper) activation cost | Propagation exists to trigger working tiles — keeping colony buildings off the cascade network entirely was never the point, it just predated having a cost mechanism nuanced enough to let them join without collapsing "recolonized"'s tap-by-tap sequencing |
+| A direct tap always activates the tapped cell, regardless of its activation cost | `TAP_SIGNAL` is smaller than every non-crystal cost — if taps were gated the same as propagation, tapping a mine or residential directly wouldn't work at all |
 
 ## Open questions
 

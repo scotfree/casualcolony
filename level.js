@@ -22,7 +22,7 @@ export function parseLevel(data) {
   }
 
   const {
-    name, size, legend, grid, energyBudget, completionGoal, attenuation, powerPlantBoost,
+    name, size, legend, grid, energyBudget, completionGoal, powerPlantBoost,
     foodPerFarm, mineYield, starvationPenalty,
   } = data;
 
@@ -85,15 +85,12 @@ export function parseLevel(data) {
   if (typeof completionGoal !== "number" || completionGoal <= 0 || completionGoal > 1) {
     throw new Error("Level needs completionGoal between 0 (exclusive) and 1 (inclusive)");
   }
-  // Optional: how much signal a hop costs. Unlike energyBudget/completionGoal
-  // there's no reason every level should have to choose one, so it defaults
-  // rather than being required.
-  const resolvedAttenuation = attenuation === undefined ? 1 : attenuation;
-  if (typeof resolvedAttenuation !== "number" || resolvedAttenuation < 0) {
-    throw new Error("Level's attenuation must be a non-negative number");
-  }
-  // Optional, same reasoning as attenuation: a building-specific number that
-  // varies per level rather than being fixed in the building table.
+  // Optional: how much a power plant boosts signal passing through it.
+  // Unlike energyBudget/completionGoal there's no reason every level should
+  // have to choose one, so it defaults rather than being required. (Unlike
+  // activation cost, which is a property of the building *type* — see
+  // buildings.js — boost stays level-tunable, since "how far can a plant
+  // reach" is a real level-design lever.)
   const resolvedPowerPlantBoost = powerPlantBoost === undefined ? 5 : powerPlantBoost;
   if (typeof resolvedPowerPlantBoost !== "number" || resolvedPowerPlantBoost < 0) {
     throw new Error("Level's powerPlantBoost must be a non-negative number");
@@ -123,7 +120,6 @@ export function parseLevel(data) {
     legend,
     energyBudget,
     completionGoal,
-    attenuation: resolvedAttenuation,
     powerPlantBoost: resolvedPowerPlantBoost,
     foodPerFarm: resolvedFoodPerFarm,
     mineYield: resolvedMineYield,
@@ -161,9 +157,8 @@ export async function loadLevelSet(url) {
 // type edited in place by the level editor) back into a plain JSON-shaped
 // level record under the given name. Only tile types can differ from the
 // record this world was parsed from — energyBudget, completionGoal,
-// attenuation, powerPlantBoost, foodPerFarm, mineYield and
-// starvationPenalty are carried through unchanged, since editing never
-// touches them.
+// powerPlantBoost, foodPerFarm, mineYield and starvationPenalty are carried
+// through unchanged, since editing never touches them.
 export function serializeLevel(world, name) {
   const charFor = {};
   for (const [char, typeId] of Object.entries(world.legend)) {
@@ -184,7 +179,6 @@ export function serializeLevel(world, name) {
     size: { width: world.width, height: world.height },
     energyBudget: world.energyBudget,
     completionGoal: world.completionGoal,
-    attenuation: world.attenuation,
     powerPlantBoost: world.powerPlantBoost,
     foodPerFarm: world.foodPerFarm,
     mineYield: world.mineYield,

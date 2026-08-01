@@ -4,25 +4,38 @@
 // character in a level file — nothing else. If a new type needs a branch
 // somewhere else in the codebase, this table is the wrong shape.
 //
-// propagate(world, cell) returns the cells this building activates when it
-// becomes active. Omit it for buildings that don't spread.
+// propagate(world, cell) returns the cells this building *could* hand signal
+// to when it activates — every orthogonal neighbour capable of activating at
+// all (see activatable() below), restricted to an axis for red/green
+// crystal. Whether a given neighbour actually activates depends on whether
+// enough signal survives to cover its own activationCost — see cascade.js.
+// Omit propagate for buildings that never spread (desert, drain).
+//
+// activationCost is how much signal a cell must receive to activate when
+// reached via propagation — a property of the *type*, not the level, so a
+// crystal (cheap, 1) can carry a signal much further than a mine (steep, 3)
+// ever could. It only gates propagated activation: the cell you actually
+// tap always activates, full stop — that certainty is what spending the
+// energy on a tap buys. A building with no activationCost can never be a
+// propagation target (desert, drain — see activatable()).
 //
 // drain(world, cell) returns the already-activated cells this building
 // deactivates when tapped. It's the inverse of propagate — a tap here
 // undoes neighbours' activation instead of spreading its own. Omit it for
 // buildings that don't drain.
 //
-// boostKey names a field on the level itself (like attenuation) holding how
-// much this building adds to the signal when it activates, before that
-// signal attenuates on its way to the next cell. Omit it for buildings that
-// don't amplify — see cascade.js. Boost lives on the level, not a hardcoded
-// number here, so different levels can tune it without a new building type.
+// boostKey names a field on the level itself holding how much this building
+// adds to the signal when it activates, before that signal is spent on
+// whatever it reaches next. Omit it for buildings that don't amplify — see
+// cascade.js. Boost lives on the level, not a hardcoded number here, so
+// different levels can tune it without a new building type.
 //
 // houses/feeds/mines are capability flags for the colony economy (see
 // colony.js): an activated houses building counts toward population, feeds
 // toward food capacity, mines toward energy income when the colony is fed.
-// None of these buildings propagate — the colony economy isn't part of the
-// crystal signal network, it's a separate system resolved every tap.
+// The colony economy itself is still resolved fresh every tap, separately
+// from cascades — resolveColony only ever reads activateAt, so it doesn't
+// care whether a cell got there by direct tap or by propagation.
 //
 // toggle: true means tapping an already-activated cell of this type
 // deactivates it instead of no-opping — see game.js. Residential is the
@@ -40,11 +53,21 @@
 
 import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
 
-// Crystal, red crystal, green crystal and the power plant all activate each
-// other — only the *axis* differs per color, not who counts as a valid
-// neighbour. A plain crystal next to a red one lights it just like it would
-// another crystal.
-const CRYSTAL_TYPES = new Set(["crystal", "redCrystal", "greenCrystal", "powerPlant"]);
+// A cell can only ever be a propagation target if it's capable of
+// activating at all — desert and drain are permanently excluded (inert),
+// but every other type is now fair game for a neighbour's signal to reach,
+// not just same-family ones. Whether it actually *does* activate is a
+// separate question, decided in cascade.js by comparing what's left of the
+// signal against the target's own activationCost.
+function activatable(neighbours) {
+  return neighbours.filter((n) => !buildingFor(n).inert);
+}
+
+// Shared by every type whose signal reaches evenly in all 4 directions
+// (everything except red/green crystal, which are axis-locked).
+function propagateOrthogonal(world, cell) {
+  return activatable(orthogonalNeighbours(world, cell));
+}
 
 export const BUILDINGS = {
   desert: {
@@ -65,13 +88,8 @@ export const BUILDINGS = {
     glow: "#2dd4bf",
     iconColor: "#f3f7fa",
     shape: "plus",
-
-    // Activating a crystal activates every orthogonally adjacent crystal,
-    // red crystal, or green crystal. Applied repeatedly by the cascade,
-    // this floods the whole connected group regardless of color.
-    propagate(world, cell) {
-      return orthogonalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
-    },
+    activationCost: 1,
+    propagate: propagateOrthogonal,
   },
 
   redCrystal: {
@@ -84,10 +102,11 @@ export const BUILDINGS = {
     glow: "#ef4444",
     iconColor: "#f87171",
     shape: "plus",
+    activationCost: 1,
 
-    // Same as crystal, but only floods along the north/south axis.
+    // Same as crystal, but only reaches along the north/south axis.
     propagate(world, cell) {
-      return verticalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
+      return activatable(verticalNeighbours(world, cell));
     },
   },
 
@@ -101,10 +120,11 @@ export const BUILDINGS = {
     glow: "#84cc16",
     iconColor: "#a3e635",
     shape: "plus",
+    activationCost: 1,
 
-    // Same as crystal, but only floods along the east/west axis.
+    // Same as crystal, but only reaches along the east/west axis.
     propagate(world, cell) {
-      return horizontalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
+      return activatable(horizontalNeighbours(world, cell));
     },
   },
 
@@ -118,13 +138,10 @@ export const BUILDINGS = {
     glow: "#f59e0b",
     iconColor: "#fbbf24",
     shape: "bolt",
+    activationCost: 1,
     // See world.powerPlantBoost (level.js) for the actual amount.
     boostKey: "powerPlantBoost",
-
-    // Same reach as plain crystal — every orthogonal crystal-family neighbour.
-    propagate(world, cell) {
-      return orthogonalNeighbours(world, cell).filter((n) => CRYSTAL_TYPES.has(n.type));
-    },
+    propagate: propagateOrthogonal,
   },
 
   residential: {
@@ -137,10 +154,12 @@ export const BUILDINGS = {
     glow: "#0ea5e9",
     iconColor: "#38bdf8",
     shape: "person",
+    // Costlier than crystal on purpose: a crystal network can spill into a
+    // colony cluster, but rarely deep — see mine's activationCost below.
+    activationCost: 2,
     houses: true,
     toggle: true,
-    // No propagate: activating one only ever lights that single cell. The
-    // colony isn't part of the crystal signal network.
+    propagate: propagateOrthogonal,
   },
 
   farm: {
@@ -153,7 +172,9 @@ export const BUILDINGS = {
     glow: "#22c55e",
     iconColor: "#4ade80",
     shape: "leaf",
+    activationCost: 2,
     feeds: true,
+    propagate: propagateOrthogonal,
   },
 
   mine: {
@@ -166,7 +187,12 @@ export const BUILDINGS = {
     glow: "#dc2626",
     iconColor: "#ef4444",
     shape: "dollar",
+    // The steepest activation cost on the board: a mine can still be
+    // *reached* by a strong enough crystal chain, but it eats most of
+    // whatever signal is left, so propagation rarely survives past one.
+    activationCost: 3,
     mines: true,
+    propagate: propagateOrthogonal,
   },
 
   drain: {

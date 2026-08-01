@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.10</span>
+  <span class="kicker">Field Edition · v0.12</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -719,19 +719,22 @@
       as patient as you are.
     </p>
 
-    <h3 class="h">Cascades: signal, attenuation, and boost</h3>
+    <h3 class="h">Cascades: signal, activation cost, and boost</h3>
     <p class="prose">
-      A tap hands the tapped tile <strong>1 unit of signal</strong>. Each
-      tile that activates passes signal onward to its neighbors, losing 1
-      unit per hop (<em>attenuation</em>) — and a plain crystal has no boost
-      of its own, so a tap on a lone crystal only ever lights that one tile.
-      A <strong>power plant</strong> is different: it adds a boost (5, by
+      A tap hands the tapped tile <strong>1 unit of signal</strong>. Every
+      other building type has its own <strong>activation cost</strong> — how
+      much signal it takes to switch it on — and each tile that activates
+      hands whatever signal is left, minus the next tile's cost, onward to
+      its neighbors. Crystal is cheap (cost 1), so a plain crystal has just
+      enough signal to light itself and nothing more. A
+      <strong>power plant</strong> is different: it adds a boost (5, by
       default) to whatever signal passes through it, which is what lets one
-      tap ripple across a whole cluster.
+      tap ripple across a whole cluster — and far enough to spill into
+      pricier tiles beyond it.
     </p>
 
     <div class="panel">
-      <div class="panel-cap">Fig. 2 — Signal decay from a power plant (boost 5, attenuation 1)</div>
+      <div class="panel-cap">Fig. 2 — Signal decay from a power plant (boost 5, crystal cost 1)</div>
       <div class="scroller">
         <div class="chain">
           <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">tap → 5 out</div></div>
@@ -747,7 +750,7 @@
           <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">0 — stops</div></div>
         </div>
       </div>
-      <div class="panel-note">A lone crystal, tapped directly: signal in 1, out <strong>1 + 0 − 1 = 0</strong> — it lights itself and nothing further.</div>
+      <div class="panel-note">A lone crystal, tapped directly: signal 1, minus its own cost of 1, plus no boost — <strong>1 − 1 + 0 = 0</strong> — it lights itself and nothing further.</div>
     </div>
 
     <p class="prose">
@@ -769,9 +772,16 @@
 
     <h3 class="h">The colony economy</h3>
     <p class="prose">
-      Residential, farm, and mine tiles don't propagate signal — each only
-      ever activates itself. Instead, they feed a second system, recomputed
-      fresh from the board after every tap:
+      Residential, farm, and mine tiles activate the same way crystals do —
+      a strong enough crystal chain can spill into one of them — but they're
+      pricier to switch on: cost 2 for residential and farm, cost 3 for a
+      mine, against a crystal's cost of 1. A mine in particular acts as a
+      signal sink: reachable from a well-boosted network, but it eats most
+      of whatever signal is left, so propagation rarely survives past one.
+      Tapping one directly still always works, the same as any tile — a tap
+      is never blocked by cost, only what a cascade has left over to spend
+      beyond the tile you actually tapped. Once active, they feed a second
+      system, recomputed fresh from the board after every tap:
     </p>
 
     <div class="panel">
@@ -857,9 +867,9 @@
         <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per active farm</td></tr>
         <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
         <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity</td></tr>
-        <tr><td>attenuation</td><td class="val">1</td><td>Signal lost per hop (default)</td></tr>
         <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
       </table>
+      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere: <strong>1</strong> for crystal (any color) and the power plant, <strong>2</strong> for residential and farm, <strong>3</strong> for a mine.</div>
     </div>
   </section>
 
@@ -914,7 +924,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.10.0
+  Casual Colony — Player's Manual · built for v0.12.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">
