@@ -607,21 +607,24 @@ cascade just doesn't extend that way. `buildings.js`'s `activatable()`
 keeps desert and drain out of the running entirely (no `activationCost` —
 they can never be a target), same as before.
 
-**The cell you tap always activates — cost only governs what you didn't
-tap.** This is the rule that keeps everything else working: `TAP_SIGNAL`
-(1) is smaller than every non-crystal type's cost, so if activation were
-gated the same way for a direct tap, tapping a mine or a residential
-wouldn't even light that one tile. Instead the tapped cell is unconditional
-in `cascade.js` (matching the "spending energy on a tap guarantees it
-lights" invariant that's been true since Milestone 2), and only the signal
-*left over* after paying its own cost decides how far the cascade reaches
-beyond it. Concretely: tapping a farm (cost 2) with signal 1 leaves -1 —
-nothing to hand to the residential or mine stacked next to it in
-"recolonized," even though all three can now propagate to each other in
-principle. The level's whole tap-by-tap teaching sequence needed no changes
-at all; verified by re-running its existing tests and the interactive
-Playwright walkthrough unchanged, byte-for-byte the same result as before
-this milestone.
+**No exemption for the tapped cell — a tap just hands it exactly its own
+cost.** The first version of this milestone special-cased the tapped cell
+(always activates, cost check skipped entirely) to guarantee a tap on a
+mine or residential still works even though the old flat `TAP_SIGNAL` (1)
+was smaller than their cost. That reads as two rules pretending to be one.
+The fix is simpler: a tap hands the tapped cell *exactly its own
+`activationCost`* — which trivially covers it, so it always activates,
+through the exact same `signal >= cost` check every other cell goes
+through, no exemption anywhere in `cascade.js`. The cost then cancels out
+of its own outgoing signal (`cost - cost + boost`), leaving just that
+building's boost to hand a neighbour — 0 for everything except a power
+plant. That's *why* a bare tap on a crystal, a mine, or a residential only
+ever lights the one cell you tapped regardless of what it cost: there was
+never anything left over to spend, only a power plant's boost creates a
+surplus. "Recolonized"'s tap-by-tap teaching sequence needed no changes
+either way — verified by re-running its tests and the interactive
+Playwright walkthrough, byte-for-byte the same result before and after this
+fix.
 
 **What actually changed, concretely:** tap a power plant next to a mine
 with enough boost in reach, and the mine now lights up as part of the same
@@ -663,7 +666,7 @@ custom cost and none does now either.
 | A building's icon shape/color is constant; only the frame and background change with activation | With the dormant/lit-gem approach, type was hardest to read on an untapped tile — exactly backwards |
 | Custom icons are keyed by building type, not level or cell | `BUILDINGS` is already a shared table; a per-type override matches that, and means one edit fixes a type everywhere it's used |
 | Colony buildings propagate and can be reached by crystal networks, gated by their own (steeper) activation cost | Propagation exists to trigger working tiles — keeping colony buildings off the cascade network entirely was never the point, it just predated having a cost mechanism nuanced enough to let them join without collapsing "recolonized"'s tap-by-tap sequencing |
-| A direct tap always activates the tapped cell, regardless of its activation cost | `TAP_SIGNAL` is smaller than every non-crystal cost — if taps were gated the same as propagation, tapping a mine or residential directly wouldn't work at all |
+| A tap hands the tapped cell exactly its own activation cost, no exemption | One `signal >= cost` rule everywhere, tapped cell included, rather than a special-cased bypass — the cost cancels itself out, leaving just that building's boost (0 but for a power plant) to reach a neighbour |
 
 ## Open questions
 

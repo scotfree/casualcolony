@@ -278,32 +278,34 @@ test("red crystal activates a green crystal directly north/south of it", () => {
 // what these tests exist to check: crystal 1, residential/farm 2, mine 3.
 
 test("a default tap only activates the tile clicked", () => {
-  // Signal starts at 1, minus crystal's own activation cost of 1 leaves 0
-  // for every neighbour — exactly the headline behaviour this mechanic is
-  // for.
+  // A tap hands the crystal exactly its own cost (1), which cancels out —
+  // with no boost of its own, there's nothing left for any neighbour.
+  // Exactly the headline behaviour this mechanic is for.
   const world = build(["CCC"]);
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "signal dies after the first cell");
 });
 
-test("a cost higher than the signal available still can't go negative-reach", () => {
-  // Tapping a mine directly always activates it (the tap is unconditional),
-  // but 1 (tap) - 3 (mine's own cost) is negative, so there's nothing left
-  // over — an adjacent mine doesn't somehow still activate.
+test("a tap on an expensive tile still can't chain into an equally expensive neighbour", () => {
+  // Tapping a mine directly activates it (a tap always hands a cell exactly
+  // its own cost, which trivially covers it), but with no boost of its own,
+  // outgoing is 3 - 3 + 0 = 0 — nothing left for the mine next door.
   const world = build(["MM"]);
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "no reach left to spend");
 });
 
 test("a power plant's boost reaches past a normal crystal's dead end", () => {
   const world = build(["PCC"]);
-  // Tap the plant: signal 1 - activation cost 1 + boost 5 = 5 handed to the
-  // first crystal, which then passes 5 - 1 = 4 to the second.
+  // Tapping the plant hands it exactly its own cost (1), which cancels out,
+  // leaving its boost (5) for the first crystal — which then passes 5 - 1 = 4
+  // to the second.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0", "2,0"], "boost carries the chain");
 });
 
 test("signal fades by exactly one cell's worth per hop past a plant", () => {
   const world = build(["PCCCCCC"]);
-  // 1 (tap) - 1 (plant's own cost) + 5 (boost) = 5, then -1 per hop: 5,4,3,2,1,0
-  // across the remaining 6 cells — the 7th receives 0 and is never reached.
+  // The plant's own cost cancels out, leaving its boost (5) for the first
+  // crystal, then -1 per hop: 5,4,3,2,1,0 across the remaining 6 cells — the
+  // 7th receives 0 and is never reached.
   assertEqual(
     litSet(world, cellAt(world, 0, 0)),
     ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0"],
@@ -313,7 +315,7 @@ test("signal fades by exactly one cell's worth per hop past a plant", () => {
 
 test("a second power plant re-boosts an already-fading signal", () => {
   const world = build(["PCCCPCCC"]);
-  // First plant: 1-1+5=5 into the C's (4,3,2 across 3 cells), dying before
+  // First plant hands 5 into the C's (4,3,2 across 3 cells), dying before
   // reaching the second plant... unless it's placed to receive exactly the
   // signal needed. Here the second P sits at index 4, receiving signal
   // 5-1-1-1=2 (three hops from the first plant), which covers its own cost
@@ -325,17 +327,18 @@ test("a second power plant re-boosts an already-fading signal", () => {
   );
 });
 
-test("tapping a power plant directly still costs exactly one energy's worth of signal", () => {
+test("tapping a power plant directly still just lights itself, with nothing nearby to spend the boost on", () => {
   // Without any neighbours to spend it on, a plant tapped alone just lights
-  // itself — same as any other lone crystal.
+  // itself — same as any other lone building.
   const world = build(["P"]);
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lone plant");
 });
 
 test("powerPlantBoost is configurable per level", () => {
   // Same chain as the "fades by exactly one cell" test above, but with a
-  // boost of 1 instead of the default 5: 1-1+1=1 handed to the first C,
-  // which then has nothing left to pass on (1-1=0) — the chain barely moves.
+  // boost of 1 instead of the default 5: the plant's cost cancels out,
+  // leaving just 1 for the first C, which then has nothing left to pass on
+  // (1-1=0) — the chain barely moves.
   const world = build(["PCCCCCC"], { powerPlantBoost: 1 });
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0"], "weaker boost, shorter reach");
 });
@@ -347,14 +350,15 @@ test("powerPlantBoost is configurable per level", () => {
 // tap, but *activation* runs through the same cascade as crystals, gated by
 // each type's own (steeper) activationCost.
 
-test("tapping one of several adjacent residential lights only itself — cost 2 beats a bare tap's signal of 1", () => {
+test("tapping one of several adjacent residential lights only itself — no boost, nothing to chain with", () => {
   const world = build(["HHH"]);
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "no leftover signal to chain with");
 });
 
 test("a strong enough crystal chain can spill into a work tile", () => {
   const world = build(["PCCH"]);
-  // Tap the plant: 1-1+5=5, then -1 per crystal hop: 4, 3 arriving at the
+  // Tap the plant: its own cost cancels out, leaving exactly its boost (5)
+  // to hand the first crystal, then -1 per crystal hop: 4, 3 arriving at the
   // residential. 3 >= its own cost of 2, so it activates, with 3-2=1 left
   // over — not enough to reach anything past it.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0", "2,0", "3,0"], "signal covers the residential's cost");
@@ -362,15 +366,16 @@ test("a strong enough crystal chain can spill into a work tile", () => {
 
 test("a mine acts as a signal sink — reachable, but rarely passes much further", () => {
   const world = build(["PCM."]);
-  // 1-1+5=5, -1 to the crystal leaves 4 arriving at the mine. 4 >= mine's
-  // cost of 3, so it activates, but only 4-3=1 is left — not enough to
-  // reach the desert even if desert could ever activate.
+  // Plant hands 5, -1 to the crystal leaves 4 arriving at the mine. 4 >=
+  // mine's cost of 3, so it activates, but only 4-3=1 is left — not enough
+  // to reach the desert even if desert could ever activate.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0", "1,0", "2,0"], "mine activates, chain stops there");
 });
 
 test("a work tile that can't cover its own cost is a dead end, not a crash", () => {
   const world = build(["CM"]);
-  // A lone crystal tap has nothing left over (1-1=0) for the mine (cost 3).
+  // A lone crystal has no boost of its own, so there's nothing left over
+  // for the mine (cost 3) next door.
   assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "mine never activates");
 });
 

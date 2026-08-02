@@ -11,13 +11,15 @@
 // enough signal survives to cover its own activationCost — see cascade.js.
 // Omit propagate for buildings that never spread (desert, drain).
 //
-// activationCost is how much signal a cell must receive to activate when
-// reached via propagation — a property of the *type*, not the level, so a
-// crystal (cheap, 1) can carry a signal much further than a mine (steep, 3)
-// ever could. It only gates propagated activation: the cell you actually
-// tap always activates, full stop — that certainty is what spending the
-// energy on a tap buys. A building with no activationCost can never be a
-// propagation target (desert, drain — see activatable()).
+// activationCost is how much signal a cell must receive to activate — a
+// property of the *type*, not the level, so a crystal (cheap, 1) can carry a
+// signal much further than a mine (steep, 3) ever could. It applies the same
+// way to a direct tap: a tap hands the tapped cell exactly its own cost,
+// which trivially covers it (see cascade.js), so a tap never fails outright
+// — but that leaves nothing over to hand a neighbour except this cell's own
+// boost, which is 0 for everything but a power plant. A building with no
+// activationCost can never be a propagation target (desert, drain — see
+// activatable()).
 //
 // drain(world, cell) returns the already-activated cells this building
 // deactivates when tapped. It's the inverse of propagate — a tap here

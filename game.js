@@ -8,7 +8,7 @@ import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.12.0";
+const VERSION = "0.12.1";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
