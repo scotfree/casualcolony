@@ -839,39 +839,67 @@ const summary = document.getElementById("summary");
 
     const recoData = rawLevels.find((r) => r.name === "recolonized");
 
+    // Mirrors game.js's pointerdown exactly: a direct tap pays the tapped
+    // building's own activationCost out of the energy pool; everything the
+    // resulting cascade reaches beyond it is free, paid for by the
+    // network's own signal. Resolves the colony after every tap, exactly
+    // like game.js's applyColonyTick.
+    function directTap(sim, state, x, y) {
+      if (state.energy <= 0) return false;
+      const cell = cellAt(sim, x, y);
+      const cascade = computeCascade(sim, cell);
+      if (cascade.length === 0) return false;
+      const cost = buildingFor(cell).activationCost ?? 1;
+      if (state.energy < cost) return false;
+      for (const { cell: target } of cascade) target.activateAt = 0;
+      state.energy -= cost;
+      const { energyDelta } = resolveColony(sim);
+      state.energy = Math.max(0, state.energy + energyDelta);
+      return true;
+    }
+
     test("recolonized: completion goal is reachable via the colony loop", () => {
-      // Constructive check, mirroring the one above, but exercising the
-      // colony economy: farms before residential before mines (food has to
-      // exist before the population it feeds), then the power plant once
-      // mining income is flowing to pay for it. Resolves the colony after
-      // every tap, exactly like game.js's applyColonyTick.
+      // Constructive check: one cheap direct tap on the power plant (cost 1)
+      // reaches the whole crystal network *for free* — the 3 farms and the
+      // 8-cell ring — establishing food capacity before anyone has moved in.
+      // Mines and residential sit off the network on purpose (see
+      // design.md) and need their own direct taps: mines first (cost 3
+      // each) so income is already flowing before population arrives (cost
+      // 2 each) — (5,0)'s 4th residential is a trap, left untapped.
       const sim = parseLevel(recoData);
-      let energy = sim.energyBudget;
-      let activated = 0;
+      const state = { energy: sim.energyBudget };
 
-      function tap(x, y) {
-        if (energy <= 0) return;
-        const cascade = computeCascade(sim, cellAt(sim, x, y));
-        if (cascade.length === 0) return;
-        for (const { cell } of cascade) cell.activateAt = 0;
-        energy -= 1;
-        activated += cascade.length;
-        const { energyDelta } = resolveColony(sim);
-        energy = Math.max(0, energy + energyDelta);
-      }
+      directTap(sim, state, 3, 6); // the power plant — lights the whole network for 1
+      directTap(sim, state, 2, 2); directTap(sim, state, 3, 2); directTap(sim, state, 4, 2); // 3 mines
+      directTap(sim, state, 2, 0); directTap(sim, state, 3, 0); directTap(sim, state, 4, 0); // 3 residential
 
-      tap(2, 1); tap(3, 1); tap(4, 1); // 3 farms
-      tap(2, 0); tap(3, 0); tap(4, 0); // 3 residential — (5,0)'s 4th is a trap, left untapped
-      tap(2, 2); tap(3, 2); tap(4, 2); // 3 mines, fed and earning by the time each lands
-      tap(2, 4); // the power plant, funded by mining income at this point
-
+      const activated = sim.cells.filter((c) => c.activateAt !== null).length;
       const fraction = activated / sim.cells.length;
       assert(
         fraction >= sim.completionGoal,
-        `colony + power plant reaches ${(fraction * 100).toFixed(1)}%, ` +
+        `colony + network reaches ${(fraction * 100).toFixed(1)}%, ` +
         `need ${(sim.completionGoal * 100).toFixed(1)}%`
       );
-      assert(energy > 0, `should still have energy to spare (had ${energy})`);
+      assert(state.energy > 0, `should still have energy to spare (had ${state.energy})`);
+    });
+
+    test("recolonized: tapping residential before any mines are online is a losing order", () => {
+      // The same tiles, tapped in the naturally-tempting-but-wrong order —
+      // population before income. Demonstrates the level actually enforces
+      // "sequence carefully": this order runs out of energy with nothing
+      // left it can afford, well short of the completion goal.
+      const sim = parseLevel(recoData);
+      const state = { energy: sim.energyBudget };
+
+      directTap(sim, state, 3, 6); // the power plant — same free network as above
+      directTap(sim, state, 2, 0); directTap(sim, state, 3, 0); directTap(sim, state, 4, 0); // residential first, no income yet
+
+      const stillAffordsAMine = state.energy >= buildingFor(cellAt(sim, 2, 2)).activationCost;
+      assert(!stillAffordsAMine, `wrong order should leave too little energy for a mine (had ${state.energy})`);
+
+      const activated = sim.cells.filter((c) => c.activateAt !== null).length;
+      const fraction = activated / sim.cells.length;
+      assert(fraction < sim.completionGoal, "stuck short of the goal, exactly the trap this order is meant to be");
     });
 
     test("recolonized: overbuilding residential without enough farms starves the colony", () => {
@@ -884,7 +912,7 @@ const summary = document.getElementById("summary");
 
     test("recolonized: culling an unfed residential is free and fixes it", () => {
       const sim = parseLevel(recoData);
-      let energy = sim.energyBudget - 1; // as if just tapped
+      let energy = sim.energyBudget - buildingFor(cellAt(sim, 2, 0)).activationCost; // as if just tapped
       cellAt(sim, 2, 0).activateAt = 0; // one residential, zero farms — unfed
       energy = Math.max(0, energy + resolveColony(sim).energyDelta);
       const afterOverbuild = energy;

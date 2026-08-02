@@ -8,7 +8,7 @@ import { resolveColony } from "./colony.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 
-const VERSION = "0.12.1";
+const VERSION = "0.13.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // Milliseconds between successive rings of a cascade, and how long a single
@@ -464,10 +464,10 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  // No taps once the budget is spent — the run is over, win or lose.
-  if (world.energy <= 0) return;
-
   if (building.drain) {
+    // Drain isn't part of the activation network — it keeps its own flat
+    // cost, gated only by whether any budget is left at all.
+    if (world.energy <= 0) return;
     const drained = building.drain(world, cell);
     if (drained.length === 0) return; // nothing to drain, so no energy spent
     for (const target of drained) target.activateAt = null;
@@ -480,13 +480,21 @@ canvas.addEventListener("pointerdown", (event) => {
   const cascade = computeCascade(world, cell);
   if (cascade.length === 0) return; // nothing activated, so no energy spent
 
+  // A direct tap "jump starts" a tile by paying its own activationCost out
+  // of the energy pool — the alternative to reaching it for free through an
+  // already-powered network (see cascade.js). Can't afford it, can't tap
+  // it; the cascade this unlocks (everything past the tapped cell) is free,
+  // paid for by the network's own signal, not the energy pool.
+  const cost = building.activationCost ?? 1;
+  if (world.energy < cost) return;
+
   // Schedule the whole chain up front: each cell lights when the clock reaches
   // its activateAt. No timers to manage, and the ripple falls out of BFS depth.
   const now = performance.now();
   for (const { cell: target, depth } of cascade) {
     target.activateAt = now + depth * RIPPLE_STEP;
   }
-  world.energy -= 1;
+  world.energy -= cost;
 
   // Any drain adjacent to a cell this cascade just lit reacts immediately —
   // it can't create a new trigger for another drain (draining only removes
@@ -693,16 +701,18 @@ function rasterizeIcon(shape) {
 }
 
 // Whether any inactive cell would still do something if tapped: light a
-// cascade, or clear something as a drain. Ignores residential's free toggle
-// cull — it's reversible and costs nothing, so its mere availability
-// shouldn't keep a run "in progress" forever.
+// cascade, or clear something as a drain — and whether the player can
+// actually afford to (a tile reachable only by a direct tap that costs more
+// than what's left in the energy pool isn't a real option anymore). Ignores
+// residential's free toggle cull — it's reversible and costs nothing, so
+// its mere availability shouldn't keep a run "in progress" forever.
 function hasProductiveMove(world) {
   for (const cell of world.cells) {
     if (cell.activateAt !== null) continue;
     const building = buildingFor(cell);
     if (building.drain) {
-      if (building.drain(world, cell).length > 0) return true;
-    } else if (computeCascade(world, cell).length > 0) {
+      if (world.energy >= 1 && building.drain(world, cell).length > 0) return true;
+    } else if (world.energy >= (building.activationCost ?? 1) && computeCascade(world, cell).length > 0) {
       return true;
     }
   }

@@ -642,6 +642,92 @@ gained `withUnlimitedReach()`, which temporarily zeroes every building's
 feature real levels can reach for, since no shipped level ever needed a
 custom cost and none does now either.
 
+## Milestone 10 — Energy and signal are one pool, and "recolonized" is rebuilt around it
+
+Milestone 9 gave every building an `activationCost`, but only used it inside
+`cascade.js`'s signal math — a direct tap still cost a flat 1 energy no
+matter what was tapped, same as since Milestone 2. That left two currencies
+with the same name: the `⚡` you actually manage, and an ephemeral per-cascade
+"signal" number that reset on every tap and never touched it. This milestone
+collapses them into one: **a direct tap now pays the tapped tile's own
+`activationCost` out of `world.energy`**, and everything a resulting cascade
+reaches beyond that tile is still free — paid for by the network's own
+signal, exactly as Milestone 9 left it.
+
+**What changed, precisely:** `game.js`'s pointerdown handler no longer does
+`world.energy -= 1` unconditionally. It computes `cost =
+building.activationCost`, blocks the tap if `world.energy < cost`, and
+spends `cost` (not 1) on success. Crystal and the power plant still cost 1
+— so a level with only crystal-family buildings (like "simple test") is
+numerically untouched, verified by replaying its walkthrough and getting an
+identical energy trace. Residential and farm now cost 2 to jump-start
+directly, and a mine costs 3.
+
+**Why the tapped cell isn't special-cased here either.** Same principle as
+Milestone 9's fix: one rule, not two. A tile you reach through a network
+pays its cost out of that network's remaining signal; a tile you reach by
+tapping it pays the identical cost out of your energy pool. The *source* of
+the payment differs, the *rule* doesn't.
+
+**Drain stays exactly as it was.** It isn't part of the activation network
+— it never lights up, it only ever clears neighbours — so tying its cost to
+`activationCost` would be answering a question nobody asked. It keeps its
+flat 1-energy-if-effective rule, gated only by whether any energy is left
+at all.
+
+**`hasProductiveMove` needed the same update.** A cell that would
+technically activate if tapped isn't a real option anymore if the player
+can't afford its cost — so board-exhaustion detection (Milestone 9) now
+checks `world.energy >= cost` before counting a cell as a live move, not
+just whether tapping it would do something.
+
+### "Recolonized" rebuilt around the new economy
+
+The old layout couldn't survive this change unmodified: its whole
+walkthrough (3 farms + 3 residential + 3 mines + power plant, each a flat-1
+direct tap) would have cost `3×2 + 3×2 + 3×3 = 21` energy against an
+8-energy budget — not a tuning problem, a different level. Rebuilt from
+scratch around what actually makes this economy interesting:
+
+- **The crystal network now reaches into the colony.** Farms sit directly
+  on a short crystal spine leading to the power plant, which also feeds the
+  usual 8-cell ring. One tap on the power plant (cost 1) activates all of
+  it — plant, spine, all 3 farms, and the whole ring — 15 cells for the
+  price of 1, since the crystals' and farms' own cost cancels out of what
+  they pass on, same arithmetic as Milestone 9. This is the payoff the
+  network was always supposed to have, and the old layout (crystal ring
+  fully isolated from the colony by a desert gap) never actually
+  demonstrated it.
+- **Mines and residential stay off the network on purpose**, walled off by
+  desert on both sides. If they weren't, a single power-plant tap would
+  chain through the whole stacked colony block at once (they're mutually
+  orthogonally adjacent), collapsing the entire point of paying for them
+  one at a time. Isolating them is what keeps "which order do I tap things
+  in" a real, load-bearing decision rather than something a network
+  shortcut quietly answers for you.
+- **`energyBudget: 5`, `completionGoal: 0.2`** (96 cells now, up from 80,
+  after the layout grew to fit the gaps). Verified by direct simulation
+  against the real `cascade.js`/`colony.js` (not hand arithmetic): budget 4
+  can't afford all three mines; budget 5 can, *if* mines come before
+  residential. Tapping residential first — population before any mining
+  income exists to pay for it — strands the run at 0 energy roughly 18%
+  activated, short of the 20% goal. That failure mode is now a real test
+  (`recolonized: tapping residential before any mines are online is a
+  losing order`), not just a hoped-for outcome.
+
+**The trap tile can end the run the instant you tap it, before you cull.**
+With the network done and 3 mines + 3 residential up, the trap residential
+is the *only* untapped, affordable tile left on the whole board — tapping it
+exhausts the board immediately (nothing else can be tapped), which resolves
+the outcome right then, mid-starvation. Culling it afterward un-starves the
+colony *and* makes the tile tappable again, which un-exhausts the board and
+clears `outcome` (Milestone 6's reversibility rule) — so the win screen
+briefly disappears until you either leave it alone or tap the trap once
+more. This wasn't designed in on purpose, but it isn't a bug either: it
+falls directly out of rules that already existed (free reversible culling,
+board-exhaustion ending a run, outcome clearing when energy recovers), and
+it's a legible, even fun thing to discover, not a dead end.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -667,6 +753,9 @@ custom cost and none does now either.
 | Custom icons are keyed by building type, not level or cell | `BUILDINGS` is already a shared table; a per-type override matches that, and means one edit fixes a type everywhere it's used |
 | Colony buildings propagate and can be reached by crystal networks, gated by their own (steeper) activation cost | Propagation exists to trigger working tiles — keeping colony buildings off the cascade network entirely was never the point, it just predated having a cost mechanism nuanced enough to let them join without collapsing "recolonized"'s tap-by-tap sequencing |
 | A tap hands the tapped cell exactly its own activation cost, no exemption | One `signal >= cost` rule everywhere, tapped cell included, rather than a special-cased bypass — the cost cancels itself out, leaving just that building's boost (0 but for a power plant) to reach a neighbour |
+| A direct tap spends its tile's `activationCost` from `world.energy`, not a flat 1; propagation beyond the tapped tile stays free | Energy and signal were the same idea wearing two names — a tap "jump starts" a network the same way a power plant does mid-cascade, so it should pay the same currency the same way |
+| Drain keeps its own flat cost, not tied to `activationCost` | It isn't part of the activation network — it never lights up, so there's no "its own cost" question to unify |
+| "Recolonized" connects the crystal network to farms/ring but walls mines and residential off with desert | Demonstrates the network's payoff (one cheap tap lights 15 cells) while keeping "which colony tile do I afford next" a real decision the network can't shortcut |
 
 ## Open questions
 

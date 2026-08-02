@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.12</span>
+  <span class="kicker">Field Edition · v0.13</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -616,89 +616,109 @@
 
   <section id="quick-start">
     <div class="eyebrow"><span class="num">§2</span> Quick Start</div>
-    <h2 class="h">Playing "Recolonized" — your first ten taps</h2>
+    <h2 class="h">Playing "Recolonized" — your first seven taps</h2>
     <p class="prose">
       <em>Recolonized</em> is the level built to walk you through every new
-      system at once. It starts you with <strong>8 energy</strong> and an
-      unlit board split into two halves: a small colony up top, and a crystal
-      ring waiting below. Tap the numbered tiles below in order — badges
-      <strong>1–10</strong> — and you'll see feeding, mining income, and a
-      full cascade in your first ten taps.
+      system at once. It starts you with a tight <strong>5 energy</strong>
+      and an unlit board split into two halves: a small colony up top, and a
+      crystal network waiting below. Tap the numbered tiles below in order —
+      badges <strong>1–7</strong> — and you'll see one tap light an entire
+      network, mining income arrive, and exactly why order matters, all in
+      your first seven taps.
     </p>
 
     <div class="panel">
       <div class="panel-cap">Fig. 1 — Recolonized, starting layout</div>
       <div class="scroller">
-        <div class="board" role="img" aria-label="8 by 10 board. Row 1: four residential tiles at columns 3 to 6, numbered 4, 5, 6, and an unnumbered trap tile. Row 2: three farms at columns 3 to 5, numbered 1, 2, 3. Row 3: three mines at columns 3 to 5, numbered 7, 8, 9. Row 5: a power plant at column 3, numbered 10. Rows 6 to 8: an 8-cell crystal ring. All other tiles are empty desert.">
-          <!-- row 0: desert desert RES RES RES RES desert desert -->
+        <div class="board" role="img" aria-label="8 by 12 board. Row 1: three residential tiles at columns 3 to 5, numbered 5, 6, 7, and an unnumbered trap tile at column 6. Row 3: three mines at columns 3 to 5, numbered 2, 3, 4. Row 5: three unnumbered farms at columns 3 to 5, connected to a crystal spine below them. Row 7: a power plant at column 4, numbered 1. Rows 8 to 10: an 8-cell crystal ring, all connected to the power plant. All other tiles are empty desert.">
+          <!-- row 0: desert desert RES RES RES trap desert desert -->
           <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--res" data-badge="4" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile tile--res" data-badge="5" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile tile--res" data-badge="6" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="7" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile tile--res" data-badge="?"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile"></div><div class="tile"></div>
-          <!-- row 1: desert desert FARM FARM FARM desert desert desert -->
-          <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--farm" data-badge="1" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile tile--farm" data-badge="2" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile tile--farm" data-badge="3" style="--accent-badge:#4ade80"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 1: all desert -->
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <!-- row 2: desert desert MINE MINE MINE desert desert desert -->
           <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--mine" data-badge="7" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile tile--mine" data-badge="8" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile tile--mine" data-badge="9" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="2" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="3" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="4" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
           <div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <!-- row 3: all desert -->
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 4: desert desert PLANT desert x5 -->
+          <!-- row 4: desert desert FARM FARM FARM desert desert desert (lit for free by the plant) -->
           <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--plant" data-badge="10" style="--accent-badge:#fbbf24"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 5: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
-          <div class="tile"></div>
+          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 5: desert desert CRYSTAL CRYSTAL CRYSTAL desert desert desert -->
+          <div class="tile"></div><div class="tile"></div>
           <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 6: desert CRYSTAL desert CRYSTAL desert x4 -->
-          <div class="tile"></div>
-          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile"></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 6: desert desert desert PLANT desert x4 -->
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <div class="tile tile--plant" data-badge="1" style="--accent-badge:#fbbf24"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <!-- row 7: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
           <div class="tile"></div>
           <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 8, 9: all desert -->
+          <!-- row 8: desert CRYSTAL desert CRYSTAL desert x4 -->
+          <div class="tile"></div>
+          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile"></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 9: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
+          <div class="tile"></div>
+          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
+          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
+          <!-- row 10, 11: all desert -->
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
         </div>
       </div>
-      <div class="panel-note">1–3 Farm · 4–6 Residential · 7–9 Mine · 10 Power Plant · <strong>?</strong> optional trap, see below — tap the <strong>Legend</strong> button any time for the full tile key</div>
+      <div class="panel-note">1 Power Plant · 2–4 Mine · 5–7 Residential · <strong>?</strong> optional trap, see below — farms and the crystal network below them light for free the moment you tap the plant — tap the <strong>Legend</strong> button any time for the full tile key</div>
     </div>
 
     <ol class="steps">
-      <li><strong>Farms first (1–3).</strong> Feeding always has to arrive before anyone moves in — after these three taps, food capacity is 3 and nobody has moved in yet.</li>
-      <li><strong>Residential next (4–6).</strong> Population climbs to 3, exactly matching capacity. The colony reads as fed — watch the HUD's population readout stay teal, not red.</li>
-      <li><strong>Mines (7–9).</strong> As long as you're fed, every activated mine adds energy back. Income should now be outpacing what these taps cost — your energy total climbs instead of falling.</li>
-      <li><strong>Power Plant (10).</strong> One tap lights the entire crystal ring below in a single cascading ripple — the plant's boost is strong enough to carry the signal all the way around.</li>
+      <li><strong>Power Plant first (1).</strong> Costs 1 energy, and lights all 15 cells of the network in one cascade — the crystal spine, all three farms, and the entire ring below. Food capacity is now 3; population is still 0.</li>
+      <li><strong>Mines next (2–4).</strong> Mines aren't wired into that network — desert walls them off on purpose, so each one costs its own 3 energy to jump-start directly. But the colony's already fed, so each mine pays for itself immediately: watch your energy total climb instead of fall as income arrives.</li>
+      <li><strong>Residential last (5–7).</strong> 2 energy each. Population climbs to 3, exactly matching capacity — fed the entire way, because the mining income is already flowing.</li>
     </ol>
+
+    <div class="callout">
+      <div class="cap">Order matters</div>
+      <p>
+        Try tapping the three residential tiles right after the power plant,
+        <em>before</em> any mine is online. Each residential tap still costs
+        2 energy, but nothing is generating income yet — you'll run out of
+        energy at 2 population with no way left to afford a mine (3 energy)
+        or the third residential tile, stranded short of the completion
+        goal. Mines before residential isn't just the tidy order — it's the
+        only order that works.
+      </p>
+    </div>
 
     <div class="callout">
       <div class="cap">Try this</div>
       <p>
         There's a fourth residential tile on the board — the one marked
-        <strong>?</strong> — that was never part of the sequence above. Tap it
-        once: population rises to 4 against only 3 food, and the colony
-        starts starving. The HUD's population readout turns red and energy
-        begins draining. Tap that same tile a <em>second</em> time — an
-        already-active residential tile deactivates instead of lighting
+        <strong>?</strong> — that was never part of the sequence above. Tap
+        it (2 energy): population rises to 4 against only 3 food, and the
+        colony starts starving. The HUD's population readout turns red and
+        energy begins draining. Tap that same tile a <em>second</em> time —
+        an already-active residential tile deactivates instead of lighting
         again — and the colony is fed again immediately, for free.
       </p>
     </div>
 
     <p class="prose">
-      You'll likely still have energy left after all ten taps — that's normal
-      for a colony earning more than it spends. See exactly how a run like
-      that actually ends in <a href="#ending">§3, How a Run Ends</a>.
+      Played in the order above, you'll finish with energy well above where
+      you started — that's normal for a colony earning more than it spends.
+      See exactly how a run like that actually ends in
+      <a href="#ending">§3, How a Run Ends</a>.
     </p>
   </section>
 
@@ -711,9 +731,11 @@
     <h3 class="h">The board and your energy</h3>
     <p class="prose">
       Every level is a grid of tiles and a fixed <strong>energy
-      budget</strong>. A tap that actually activates something spends exactly
-      1 energy, no matter how many tiles it lights — you're paying for the
-      decision, not the payoff. Tapping desert, an already-lit tile, or
+      budget</strong>. Every building type has its own <strong>activation
+      cost</strong> — crystal and the power plant are cheap (1), residential
+      and farm cost 2, a mine costs 3 — and tapping a tile that isn't already
+      active spends that tile's own cost directly out of your energy pool.
+      Can't afford it, can't tap it. Tapping desert, an already-lit tile, or
       anything that wouldn't change the board is always free. There's no
       timer and nothing moves on its own between taps; the board is exactly
       as patient as you are.
@@ -721,16 +743,19 @@
 
     <h3 class="h">Cascades: signal, activation cost, and boost</h3>
     <p class="prose">
-      A tap hands the tapped tile <strong>1 unit of signal</strong>. Every
-      other building type has its own <strong>activation cost</strong> — how
-      much signal it takes to switch it on — and each tile that activates
-      hands whatever signal is left, minus the next tile's cost, onward to
-      its neighbors. Crystal is cheap (cost 1), so a plain crystal has just
-      enough signal to light itself and nothing more. A
-      <strong>power plant</strong> is different: it adds a boost (5, by
-      default) to whatever signal passes through it, which is what lets one
-      tap ripple across a whole cluster — and far enough to spill into
-      pricier tiles beyond it.
+      A tap hands the tapped tile signal exactly equal to its own activation
+      cost — enough to cover itself, with nothing left over unless that tile
+      also adds a boost. Each tile that activates hands whatever signal is
+      left, minus the next tile's cost, onward to its neighbors. Crystal is
+      cheap (cost 1), so a plain crystal has just enough signal to light
+      itself and nothing more. A <strong>power plant</strong> is different:
+      it adds a boost (5, by default) to whatever signal passes through it,
+      which is what lets one tap ripple across a whole cluster — and far
+      enough to spill into pricier tiles beyond it. That's the one place
+      energy and signal meet: a direct tap spends real energy equal to the
+      tapped tile's own cost, and everything the resulting cascade reaches
+      <em>beyond</em> that tile is free, paid for by the network's own
+      signal, never your energy pool.
     </p>
 
     <div class="panel">
@@ -778,10 +803,12 @@
       mine, against a crystal's cost of 1. A mine in particular acts as a
       signal sink: reachable from a well-boosted network, but it eats most
       of whatever signal is left, so propagation rarely survives past one.
-      Tapping one directly still always works, the same as any tile — a tap
-      is never blocked by cost, only what a cascade has left over to spend
-      beyond the tile you actually tapped. Once active, they feed a second
-      system, recomputed fresh from the board after every tap:
+      Tapping one directly costs that same amount out of your <strong>energy
+      pool</strong> — 2 for residential or farm, 3 for a mine — so unlike a
+      crystal, these tiles can be too expensive to jump-start until you've
+      built up enough energy to afford them (mining income, once it's
+      flowing, is usually what makes that possible). Once active, they feed
+      a second system, recomputed fresh from the board after every tap:
     </p>
 
     <div class="panel">
@@ -848,8 +875,9 @@
       <li><strong>Energy hits 0.</strong> The original rule: no taps left to spend.</li>
       <li><strong>The board is exhausted.</strong> New with mining: if your
         colony earns more than it spends, energy can climb instead of drain.
-        Once every remaining tile would be a no-op if tapped, the run ends
-        right there — even with energy still on the clock.</li>
+        Once every remaining tile would either do nothing if tapped, or cost
+        more than the energy you have left, the run ends right there — even
+        with energy still on the clock.</li>
     </ul>
     <p class="prose">
       Either way, the fraction of the whole board that ended up activated is
@@ -862,14 +890,14 @@
       <div class="panel-cap">Fig. 4 — Level knobs, "Recolonized"</div>
       <table class="knobs">
         <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
-        <tr><td>energyBudget</td><td class="val">8</td><td>Starting energy</td></tr>
-        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the 80-tile board you need lit</td></tr>
+        <tr><td>energyBudget</td><td class="val">5</td><td>Starting energy</td></tr>
+        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the 96-tile board you need lit</td></tr>
         <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per active farm</td></tr>
         <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
         <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity</td></tr>
         <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
       </table>
-      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere: <strong>1</strong> for crystal (any color) and the power plant, <strong>2</strong> for residential and farm, <strong>3</strong> for a mine.</div>
+      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere, and it's what a direct tap spends from your energy pool too: <strong>1</strong> for crystal (any color) and the power plant, <strong>2</strong> for residential and farm, <strong>3</strong> for a mine.</div>
     </div>
   </section>
 
@@ -924,7 +952,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.12.1
+  Casual Colony — Player's Manual · built for v0.13.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">
