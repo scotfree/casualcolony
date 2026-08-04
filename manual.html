@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.13</span>
+  <span class="kicker">Field Edition · v0.14</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -619,32 +619,32 @@
     <h2 class="h">Playing "Recolonized" — your first seven taps</h2>
     <p class="prose">
       <em>Recolonized</em> is the level built to walk you through every new
-      system at once. It starts you with a tight <strong>5 energy</strong>
+      system at once. It starts you with a tight <strong>7 energy</strong>
       and an unlit board split into two halves: a small colony up top, and a
       crystal network waiting below. Tap the numbered tiles below in order —
       badges <strong>1–7</strong> — and you'll see one tap light an entire
-      network, mining income arrive, and exactly why order matters, all in
-      your first seven taps.
+      network, mining income arrive, and exactly why the order alternates,
+      all in your first seven taps.
     </p>
 
     <div class="panel">
       <div class="panel-cap">Fig. 1 — Recolonized, starting layout</div>
       <div class="scroller">
-        <div class="board" role="img" aria-label="8 by 12 board. Row 1: three residential tiles at columns 3 to 5, numbered 5, 6, 7, and an unnumbered trap tile at column 6. Row 3: three mines at columns 3 to 5, numbered 2, 3, 4. Row 5: three unnumbered farms at columns 3 to 5, connected to a crystal spine below them. Row 7: a power plant at column 4, numbered 1. Rows 8 to 10: an 8-cell crystal ring, all connected to the power plant. All other tiles are empty desert.">
+        <div class="board" role="img" aria-label="8 by 12 board. Row 1: three residential tiles at columns 3 to 5, numbered 2, 4, 6, and an unnumbered trap tile at column 6. Row 3: three mines at columns 3 to 5, numbered 3, 5, 7. Row 5: three unnumbered farms at columns 3 to 5, connected to a crystal spine below them. Row 7: a power plant at column 4, numbered 1. Rows 8 to 10: an 8-cell crystal ring, all connected to the power plant. All other tiles are empty desert.">
           <!-- row 0: desert desert RES RES RES trap desert desert -->
           <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--res" data-badge="5" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="2" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
+          <div class="tile tile--res" data-badge="4" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile tile--res" data-badge="6" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
-          <div class="tile tile--res" data-badge="7" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile tile--res" data-badge="?"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
           <div class="tile"></div><div class="tile"></div>
           <!-- row 1: all desert -->
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <!-- row 2: desert desert MINE MINE MINE desert desert desert -->
           <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--mine" data-badge="2" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
           <div class="tile tile--mine" data-badge="3" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile tile--mine" data-badge="4" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="5" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
+          <div class="tile tile--mine" data-badge="7" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
           <div class="tile"></div><div class="tile"></div><div class="tile"></div>
           <!-- row 3: all desert -->
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
@@ -679,25 +679,27 @@
           <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
         </div>
       </div>
-      <div class="panel-note">1 Power Plant · 2–4 Mine · 5–7 Residential · <strong>?</strong> optional trap, see below — farms and the crystal network below them light for free the moment you tap the plant — tap the <strong>Legend</strong> button any time for the full tile key</div>
+      <div class="panel-note">1 Power Plant · 2, 4, 6 Residential · 3, 5, 7 Mine · <strong>?</strong> optional trap, see below — farms and the crystal network below them light for free the moment you tap the plant — tap the <strong>Legend</strong> button any time for the full tile key</div>
     </div>
 
     <ol class="steps">
       <li><strong>Power Plant first (1).</strong> Costs 1 energy, and lights all 15 cells of the network in one cascade — the crystal spine, all three farms, and the entire ring below. Food capacity is now 3; population is still 0.</li>
-      <li><strong>Mines next (2–4).</strong> Mines aren't wired into that network — desert walls them off on purpose, so each one costs its own 3 energy to jump-start directly. But the colony's already fed, so each mine pays for itself immediately: watch your energy total climb instead of fall as income arrives.</li>
-      <li><strong>Residential last (5–7).</strong> 2 energy each. Population climbs to 3, exactly matching capacity — fed the entire way, because the mining income is already flowing.</li>
+      <li><strong>Residential, then a mine (2, 3).</strong> Tap a residential tile first (2 energy) to seed one resident — then a mine (3 energy). A mine only pays out once someone's there to work it, so tapping it right after that first resident earns income immediately.</li>
+      <li><strong>Repeat twice more (4–7).</strong> Residential, mine, residential, mine — each mine keeps paying out because a resident is always already in place before you tap it. Population climbs to 3, exactly matching capacity, fed the entire way.</li>
     </ol>
 
     <div class="callout">
       <div class="cap">Order matters</div>
       <p>
-        Try tapping the three residential tiles right after the power plant,
-        <em>before</em> any mine is online. Each residential tap still costs
-        2 energy, but nothing is generating income yet — you'll run out of
-        energy at 2 population with no way left to afford a mine (3 energy)
-        or the third residential tile, stranded short of the completion
-        goal. Mines before residential isn't just the tidy order — it's the
-        only order that works.
+        A mine only earns energy once the colony has <strong>both</strong>
+        food capacity <em>and</em> at least one resident to work it — being
+        "fed" at population 0 doesn't count. Try tapping all three
+        residential tiles first, then the mines: you'll run out of energy
+        before affording even the first mine. Try the opposite — all three
+        mines first, then residential: those mines pay out nothing (nobody's
+        there yet), and you'll run out before affording a single resident.
+        Only alternating keeps income arriving in time to pay for what comes
+        next.
       </p>
     </div>
 
@@ -715,9 +717,9 @@
     </div>
 
     <p class="prose">
-      Played in the order above, you'll finish with energy well above where
-      you started — that's normal for a colony earning more than it spends.
-      See exactly how a run like that actually ends in
+      Played in the order above, you'll finish with more energy than you
+      started with — that's normal for a colony earning more than it
+      spends. See exactly how a run like that actually ends in
       <a href="#ending">§3, How a Run Ends</a>.
     </p>
   </section>
@@ -838,7 +840,7 @@
       </div>
       <div class="flow" style="margin-top:18px">
         <div class="branch">
-          <div class="outcome-pill fed">population ≤ capacity → <strong>fed</strong></div>
+          <div class="outcome-pill fed">0 &lt; population ≤ capacity → <strong>fed</strong></div>
           <div class="panel-note" style="margin:0">+ mineYield energy per active mine</div>
         </div>
         <div class="flow-arrow" style="visibility:hidden">→</div>
@@ -850,8 +852,11 @@
     </div>
 
     <p class="prose">
-      Mines only pay out while the colony is fed — a starving colony's mines
-      sit idle, and the shortfall bleeds energy instead. That drain is what
+      Mines only pay out while the colony is fed <strong>and has at least one
+      resident</strong> — a colony of zero is trivially "fed" against any
+      food capacity, but there's nobody there to work a mine, so it earns
+      nothing until someone moves in. A starving colony's mines also sit
+      idle, and the shortfall bleeds energy instead. That drain is what
       you're avoiding by managing population yourself, tile by tile.
     </p>
 
@@ -890,7 +895,7 @@
       <div class="panel-cap">Fig. 4 — Level knobs, "Recolonized"</div>
       <table class="knobs">
         <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
-        <tr><td>energyBudget</td><td class="val">5</td><td>Starting energy</td></tr>
+        <tr><td>energyBudget</td><td class="val">7</td><td>Starting energy</td></tr>
         <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the 96-tile board you need lit</td></tr>
         <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per active farm</td></tr>
         <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
@@ -952,7 +957,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.13.0
+  Casual Colony — Player's Manual · built for v0.14.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">

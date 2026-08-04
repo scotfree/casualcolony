@@ -728,6 +728,47 @@ falls directly out of rules that already existed (free reversible culling,
 board-exhaustion ending a run, outcome clearing when energy recovers), and
 it's a legible, even fun thing to discover, not a dead end.
 
+## Milestone 11 — Mines need a population, not just "fed"
+
+Playing through the freshly-shipped Milestone 10 walkthrough surfaced a real
+bug: tapping all three mines *before* any residential still generated mining
+income. `resolveColony`'s rule was `population <= foodCapacity` — trivially
+true at population 0, since 0 is never greater than any capacity — so a
+colony with nobody living in it still counted as "fed" and mines paid out
+regardless. The design's own words (Milestone 6: "mine converts a **fed
+population** into energy income") always implied a population was required;
+the code just never actually checked for one.
+
+**The fix is one added condition.** `resolveColony` (`colony.js`) now pays
+mine income only when `population > 0` *and* `population <= foodCapacity` —
+fed with nobody home produces nothing, same as unfed. Unrelated to anything
+about signal or activation cost; this is purely the colony-economy half of
+the game, and cascades/energy-per-tap are untouched.
+
+**This invalidated "recolonized"'s freshly-tuned numbers again.** The
+Milestone 10 walkthrough (plant, then all 3 mines, then all 3 residential)
+relied entirely on the population-0 loophole — with it closed, that order
+now stalls after 2 mines with no income ever having arrived. So does the
+reverse order (all residential, then mines), which was already a losing
+order before this fix and still is. Re-simulated against the real
+`cascade.js`/`colony.js` (not hand arithmetic, same discipline as Milestone
+10): the *only* order that now works is interleaved — one resident to seed
+population, then a mine to start earning, repeated — because a mine can't
+pay out until a resident already has, and a resident can't be afforded a
+third time without a mine having already paid out. `energyBudget: 7` (up
+from 5) is the tightest budget where that interleaved order clears the
+20% goal with energy to spare, confirmed both by simulation and by
+replaying it in the browser (15 cells for 1 energy from the plant tap, then
+alternating 2/3-cost taps with income arriving right on schedule, ending at
+21/96 activated with 9 energy left over — the same final activated count as
+before, just reached by a different, now-mandatory order). Both wrong orders
+(residential-only, mine-only) are now covered by their own tests.
+
+**The trap tile's win/un-win behavior (Milestone 10) is unaffected.**
+Tapping it still exhausts the board mid-starvation and wins immediately;
+culling it still un-starves the colony, restores mining income, and clears
+`outcome` until the trap is retapped — verified again at the new budget.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -756,6 +797,7 @@ it's a legible, even fun thing to discover, not a dead end.
 | A direct tap spends its tile's `activationCost` from `world.energy`, not a flat 1; propagation beyond the tapped tile stays free | Energy and signal were the same idea wearing two names — a tap "jump starts" a network the same way a power plant does mid-cascade, so it should pay the same currency the same way |
 | Drain keeps its own flat cost, not tied to `activationCost` | It isn't part of the activation network — it never lights up, so there's no "its own cost" question to unify |
 | "Recolonized" connects the crystal network to farms/ring but walls mines and residential off with desert | Demonstrates the network's payoff (one cheap tap lights 15 cells) while keeping "which colony tile do I afford next" a real decision the network can't shortcut |
+| Mine income requires `population > 0`, not just `population <= foodCapacity` | "Fed" was trivially true at population 0, so mines with nobody working them paid out anyway — never the intent, just an unchecked edge of the `<=` comparison |
 
 ## Open questions
 

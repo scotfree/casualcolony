@@ -16,11 +16,13 @@ import { buildingFor } from "./buildings.js";
 // board state. Pure: reads the world, changes nothing — the caller applies
 // energyDelta to world.energy.
 //
-// A fed colony (population <= foodCapacity) earns energy from every
-// activated mine. An unfed one bleeds energy instead, proportional to the
-// shortfall — that's the cost the player is avoiding by culling excess
-// residential (tapping an already-active one deactivates it; see
-// buildings.js's `toggle`) rather than just letting it sit unfed.
+// A fed colony (population <= foodCapacity) with at least one resident earns
+// energy from every activated mine — a mine converts a fed *population* into
+// income, so population 0 (trivially "fed" against any capacity) produces
+// nothing: there's no one to work it. An unfed colony bleeds energy instead,
+// proportional to the shortfall — that's the cost the player is avoiding by
+// culling excess residential (tapping an already-active one deactivates it;
+// see buildings.js's `toggle`) rather than just letting it sit unfed.
 export function resolveColony(world) {
   let population = 0;
   let foodCapacity = 0;
@@ -36,7 +38,7 @@ export function resolveColony(world) {
 
   const fed = population <= foodCapacity;
   const energyDelta = fed
-    ? mines * world.mineYield
+    ? (population > 0 ? mines * world.mineYield : 0)
     : -(population - foodCapacity) * world.starvationPenalty;
 
   return { population, foodCapacity, fed, energyDelta };
