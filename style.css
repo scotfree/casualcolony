@@ -36,11 +36,14 @@ body {
   height: 100%;
 }
 
+/* Bright white on purpose: this is the one thing on screen that answers
+   "am I actually looking at the build I just deployed?", so it has to be
+   readable at a glance rather than tucked away as background detail. */
 #version {
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom) + 8px);
   right: calc(env(safe-area-inset-right) + 10px);
-  color: #4a5568;
+  color: #ffffff;
   font-size: 11px;
   pointer-events: none;
 }
