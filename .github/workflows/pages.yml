@@ -1,0 +1,55 @@
+# Publishes the site to GitHub Pages.
+#
+# This repo is static files with no build step, so "building" is just
+# uploading the repo root as-is — the same thing Pages' legacy branch-based
+# builder did. The reason it's an explicit workflow instead: the legacy
+# `dynamic/pages/pages-build-deployment` job is opaque and can't be
+# re-run or dispatched by hand, and when its build job stopped being
+# assigned a runner (cancelled at a 15-minute timeout, twice running) there
+# was no lever to pull. This one runs on ordinary runners and has
+# workflow_dispatch, so a stuck deploy can be retried directly.
+#
+# Requires Settings → Pages → Source set to "GitHub Actions".
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Lets a failed or stuck deploy be re-run by hand, without an empty commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never publish two builds at once, but don't cancel a deploy already in
+# flight either — a half-finished publish is worse than a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # The whole repo root is the site (index.html, the ES modules, levels/,
+      # manual.html). .git and .github are excluded by the action itself.
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
