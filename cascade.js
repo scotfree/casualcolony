@@ -10,8 +10,8 @@
 // cost. A tap hands the tapped cell exactly its own activationCost, which is
 // just enough to cover itself; what a cell then has left to hand a neighbour
 // is that signal minus the neighbour's own cost, plus this cell's boost (0
-// for most buildings; a power plant's is world[boostKey], e.g.
-// world.powerPlantBoost). For a direct tap this collapses to exactly the
+// for most buildings; a power plant's is world.level[boostKey], e.g.
+// world.level.powerPlantBoost). For a direct tap this collapses to exactly the
 // tapped building's own boost — 0 for everything except a power plant —
 // which is why a bare tap on anything else only ever lights the one cell you
 // tapped, and it takes a power plant somewhere in the chain to reach further.
@@ -38,7 +38,7 @@ function costOf(building) {
 // start a cascade. Pure: it reads the world but changes nothing.
 export function computeCascade(world, start) {
   if (!start) return [];
-  if (start.activateAt !== null) return []; // already lit or already scheduled
+  if (start.active) return []; // already lit
   const startBuilding = buildingFor(start);
   if (startBuilding.inert) return [];
 
@@ -46,7 +46,7 @@ export function computeCascade(world, start) {
   // which by definition covers it. What's left to hand a neighbour is just
   // this cell's own boost (0 for anything but a power plant) — see the
   // module doc above.
-  const startBoost = startBuilding.boostKey ? world[startBuilding.boostKey] : 0;
+  const startBoost = startBuilding.boostKey ? world.level[startBuilding.boostKey] : 0;
   const result = [{ cell: start, depth: 0 }];
   const seen = new Set([start]);
   let frontier = [{ cell: start, signal: startBoost }];
@@ -59,13 +59,13 @@ export function computeCascade(world, start) {
       if (!building.propagate) continue;
       for (const neighbour of building.propagate(world, cell)) {
         if (seen.has(neighbour)) continue;
-        if (neighbour.activateAt !== null) continue;
+        if (neighbour.active) continue;
         const nBuilding = buildingFor(neighbour);
         const cost = costOf(nBuilding);
         if (signal < cost) continue; // can't afford to activate this one — dead end
         seen.add(neighbour);
         result.push({ cell: neighbour, depth });
-        const boost = nBuilding.boostKey ? world[nBuilding.boostKey] : 0;
+        const boost = nBuilding.boostKey ? world.level[nBuilding.boostKey] : 0;
         next.push({ cell: neighbour, signal: signal - cost + boost });
       }
     }

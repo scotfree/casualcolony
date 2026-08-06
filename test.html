@@ -20,9 +20,10 @@
 <div id="summary"></div>
 
 <script type="module">
-import { parseLevel, loadLevelSet, serializeLevel } from "./level.js";
+import { parseLevel, createRun, loadLevelSet, serializeLevel } from "./level.js";
 import { computeCascade, triggeredDrains } from "./cascade.js";
-import { resolveColony } from "./colony.js";
+import { resolveColony, hasColony } from "./colony.js";
+import { resolveTap, applyTap, tap, hasProductiveMove, activatedFraction } from "./rules.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
@@ -70,10 +71,10 @@ function assertThrows(fn, fragment) {
   );
 }
 
-// Build a world from row strings, using the same parser the game uses.
-// Energy and goal are irrelevant to cascade/parsing tests, so give them
+// Parse a level definition from row strings, using the same parser the game
+// uses. Energy and goal are irrelevant to cascade/parsing tests, so give them
 // permissive defaults; tests that care override via extra.
-function build(rows, extra = {}) {
+function buildLevel(rows, extra = {}) {
   return parseLevel({
     name: "test",
     size: { width: rows[0].length, height: rows.length },
@@ -86,6 +87,17 @@ function build(rows, extra = {}) {
     completionGoal: 1,
     ...extra,
   });
+}
+
+// A fresh *run* of that level — what gameplay tests actually work against.
+function build(rows, extra = {}) {
+  return createRun(buildLevel(rows, extra));
+}
+
+// Marks cells active the way a tap would, without going through the rules —
+// for tests that want to set up a board state directly.
+function light(world, ...coords) {
+  for (const [x, y] of coords) cellAt(world, x, y).active = true;
 }
 
 // Cascade cells as "x,y" strings, sorted, for order-independent comparison.
@@ -165,14 +177,14 @@ test("tapping desert does nothing", () => {
 
 test("tapping an already-scheduled cell does nothing", () => {
   const world = build(["CC"]);
-  cellAt(world, 0, 0).activateAt = 0;
+  cellAt(world, 0, 0).active = true;
   assertEqual(computeCascade(world, cellAt(world, 0, 0)), [], "no re-trigger");
 });
 
 test("cascade skips cells already lit by an earlier tap", () => {
   withUnlimitedReach(() => {
     const world = build(["CCC"]);
-    cellAt(world, 1, 0).activateAt = 0;
+    cellAt(world, 1, 0).active = true;
     // The middle cell is already lit, so it blocks the walk to the far end,
     // even with unlimited signal.
     assertEqual(litSet(world, cellAt(world, 0, 0)), ["0,0"], "lit cells block");
@@ -381,7 +393,12 @@ test("a work tile that can't cover its own cost is a dead end, not a crash", () 
 
 test("resolveColony on an empty board: fed trivially, no income", () => {
   const world = build(["..."]);
-  assertEqual(resolveColony(world), { population: 0, foodCapacity: 0, fed: true, energyDelta: 0 }, "0 <= 0 is fed");
+  const colony = resolveColony(world);
+  assertEqual(
+    { population: colony.population, foodCapacity: colony.foodCapacity, fed: colony.fed, energyDelta: colony.energyDelta },
+    { population: 0, foodCapacity: 0, fed: true, energyDelta: 0 },
+    "0 <= 0 is fed"
+  );
 });
 
 test("resolveColony counts only activated houses/farms/mines", () => {
@@ -389,7 +406,7 @@ test("resolveColony counts only activated houses/farms/mines", () => {
   // Nothing tapped yet — none of it counts.
   assertEqual(resolveColony(world).population, 0, "population starts at 0");
   for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
-    cell.activateAt = 0;
+    cell.active = true;
   }
   const colony = resolveColony(world);
   assertEqual(colony.population, 2, "2 activated residential");
@@ -400,7 +417,7 @@ test("resolveColony counts only activated houses/farms/mines", () => {
 test("a fed colony earns energy from every activated mine", () => {
   const world = build(["HFMM"], { mineYield: 3 });
   for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
-    cell.activateAt = 0;
+    cell.active = true;
   }
   const colony = resolveColony(world);
   assertEqual(colony.fed, true, "1 population <= 1 food capacity");
@@ -414,21 +431,149 @@ test("an unfed colony bleeds energy proportional to the shortfall, and earns not
     cellAt(world, 3, 0), // 1 farm
     cellAt(world, 4, 0), // 1 mine, but colony is unfed
   ]) {
-    cell.activateAt = 0;
+    cell.active = true;
   }
   const colony = resolveColony(world);
   assertEqual(colony.fed, false, "3 population > 1 food capacity");
   assertEqual(colony.energyDelta, -4, "2 unfed workers x starvationPenalty(2), mine ignored while unfed");
 });
 
+test("resolveColony sums declared stocks generically, not by named flags", () => {
+  // buildings.js declares what a type contributes as resources; colony.js
+  // sums whatever it finds. This asserts the generic path, not just the two
+  // resources that happen to exist today.
+  const world = build(["HHF"], { foodPerFarm: 5 });
+  light(world, [0, 0], [1, 0], [2, 0]);
+  const { stocks } = resolveColony(world);
+  assertEqual(stocks.population, 2, "population came from residential's declared stock");
+  assertEqual(stocks.food, 5, "food came from farm's, scaled by the level knob it names");
+});
+
+test("a mine with nobody living there earns nothing, even though 0 counts as fed", () => {
+  const world = build(["FM"], { mineYield: 4 });
+  light(world, [0, 0], [1, 0]); // a farm and a mine, but no residential
+  const colony = resolveColony(world);
+  assertEqual(colony.population, 0, "nobody lives here");
+  assertEqual(colony.fed, true, "0 <= any capacity is trivially fed");
+  assertEqual(colony.energyDelta, 0, "but there's no one to work the mine");
+});
+
+test("one resident is enough to put every mine to work", () => {
+  const world = build(["HFMM"], { mineYield: 4 });
+  light(world, [0, 0], [1, 0], [2, 0], [3, 0]);
+  assertEqual(resolveColony(world).energyDelta, 8, "2 mines x mineYield(4), staffed by 1 resident");
+});
+
 test("foodPerFarm scales how much one farm feeds", () => {
   const world = build(["HHHF"], { foodPerFarm: 3 });
   for (const cell of [cellAt(world, 0, 0), cellAt(world, 1, 0), cellAt(world, 2, 0), cellAt(world, 3, 0)]) {
-    cell.activateAt = 0;
+    cell.active = true;
   }
   const colony = resolveColony(world);
   assertEqual(colony.foodCapacity, 3, "1 farm x foodPerFarm(3)");
   assertEqual(colony.fed, true, "3 population <= 3 food capacity");
+});
+
+test("hasColony only reports boards that actually use the colony economy", () => {
+  assertEqual(hasColony(build(["CCP"])), false, "a crystal-only level has no colony");
+  assertEqual(hasColony(build(["C.M"])), true, "one mine is enough");
+});
+
+// --- Rules (resolveTap / applyTap) -------------------------------------------
+//
+// The single source of truth for what a tap does. These test it directly,
+// which is the same thing game.js's pointerdown and the walkthroughs below
+// both go through — there is no second copy of this logic to drift.
+
+test("resolveTap reports an ordinary activation, its cost, and its cascade", () => {
+  const world = build(["PC"]);
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.kind, "activate", "kind");
+  assertEqual(resolved.ok, true, "ok");
+  assertEqual(resolved.energyCost, 1, "a power plant's own activationCost");
+  assertEqual(resolved.cascade.length, 2, "plant plus the crystal its boost reaches");
+});
+
+test("resolveTap refuses a tap the energy pool can't cover", () => {
+  const world = build(["M"], { energyBudget: 2 }); // a mine costs 3
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.ok, false, "not affordable");
+  assertEqual(resolved.reason, "energy", "and it says why");
+  assertEqual(resolved.energyCost, 3, "while still reporting the price");
+});
+
+test("resolveTap reports a no-op on desert as a no-op, not a cost", () => {
+  const world = build(["."]);
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.ok, false, "nothing to do");
+  assertEqual(resolved.reason, "noop", "and it's not an affordability problem");
+  assertEqual(resolved.energyCost, 0, "desert is free to tap");
+});
+
+test("resolveTap turns a second tap on residential into a free cull", () => {
+  const world = build(["H"]);
+  tap(world, cellAt(world, 0, 0));
+  assertEqual(cellAt(world, 0, 0).active, true, "first tap activates");
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.kind, "cull", "second tap culls");
+  assertEqual(resolved.energyCost, 0, "for free");
+});
+
+test("a cull is allowed at zero energy — the whole point of it being free", () => {
+  const world = build(["HH"], { energyBudget: 2 });
+  tap(world, cellAt(world, 0, 0)); // costs 2, leaving 0 and a starving colony
+  assertEqual(world.energy, 0, "spent the budget and then some");
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.ok, true, "still cullable with nothing left in the pool");
+});
+
+test("applyTap spends the tapped cell's own cost, not a flat 1", () => {
+  const world = build(["M"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  assertEqual(world.energy, 6, "a mine costs 3");
+});
+
+test("applyTap stamps a ripple by BFS depth, and clamps energy at zero", () => {
+  const world = build(["PCC"], { energyBudget: 1 });
+  tap(world, cellAt(world, 0, 0), 1000);
+  assertEqual(cellAt(world, 0, 0).litAt, 1000, "the tapped cell lights immediately");
+  assert(cellAt(world, 1, 0).litAt > 1000, "its neighbour a moment later");
+  assert(cellAt(world, 2, 0).litAt > cellAt(world, 1, 0).litAt, "and the next one later still");
+  assertEqual(world.energy, 0, "energy never goes negative");
+});
+
+test("hasProductiveMove sees an affordable tap, and stops seeing it when it isn't", () => {
+  const world = build(["M."], { energyBudget: 3 });
+  assertEqual(hasProductiveMove(world), true, "3 energy affords the mine");
+  world.energy = 2;
+  assertEqual(hasProductiveMove(world), false, "2 doesn't, and desert was never a move");
+});
+
+test("hasProductiveMove ignores a cull, so a cullable tile can't stall a run", () => {
+  const world = build(["H"], { energyBudget: 2 });
+  tap(world, cellAt(world, 0, 0));
+  assertEqual(resolveTap(world, cellAt(world, 0, 0)).ok, true, "culling it is still possible");
+  assertEqual(hasProductiveMove(world), false, "but that alone doesn't count as progress");
+});
+
+test("a drain tap costs energy only when it actually clears something", () => {
+  const world = build(["DC"], { energyBudget: 5 });
+  assertEqual(resolveTap(world, cellAt(world, 0, 0)).ok, false, "nothing lit, nothing to drain");
+  assertEqual(world.energy, 5, "so no energy spent");
+
+  light(world, [1, 0]);
+  const resolved = resolveTap(world, cellAt(world, 0, 0));
+  assertEqual(resolved.kind, "drain", "now there's something to clear");
+  applyTap(world, resolved);
+  assertEqual(cellAt(world, 1, 0).active, false, "the neighbour is cleared");
+  assertEqual(world.energy, 4, "and that cost 1");
+});
+
+test("activatedFraction counts every cell on the board, inert ones included", () => {
+  const world = build(["C..."]);
+  assertEqual(activatedFraction(world), 0, "nothing lit yet");
+  tap(world, cellAt(world, 0, 0));
+  assertEqual(activatedFraction(world), 0.25, "1 of 4 cells, not 1 of 1 crystal");
 });
 
 // --- Drain --------------------------------------------------------------
@@ -451,15 +596,15 @@ test("drain only returns activated orthogonal neighbours", () => {
     "DC",
     "CC",
   ]);
-  cellAt(world, 1, 0).activateAt = 0; // lit
-  cellAt(world, 0, 1).activateAt = 0; // lit
+  cellAt(world, 1, 0).active = true; // lit
+  cellAt(world, 0, 1).active = true; // lit
   // (1,1) is diagonal from the drain, not orthogonal, and stays unlit.
   assertEqual(drainSet(world, cellAt(world, 0, 0)), ["0,1", "1,0"], "orthogonal and lit only");
 });
 
 test("drain doesn't care what type its neighbour is", () => {
   const world = build(["DR"]);
-  cellAt(world, 1, 0).activateAt = 0;
+  cellAt(world, 1, 0).active = true;
   // Red crystal only propagates north/south, but drain isn't propagation —
   // it reaches any adjacent activated cell regardless of that cell's own rule.
   assertEqual(drainSet(world, cellAt(world, 0, 0)), ["1,0"], "type-agnostic");
@@ -467,9 +612,9 @@ test("drain doesn't care what type its neighbour is", () => {
 
 test("drain never activates anything itself", () => {
   const world = build(["DC"]);
-  cellAt(world, 1, 0).activateAt = 0;
+  cellAt(world, 1, 0).active = true;
   buildingFor(cellAt(world, 0, 0)).drain(world, cellAt(world, 0, 0));
-  assertEqual(cellAt(world, 0, 0).activateAt, null, "drain tile stays unactivated");
+  assertEqual(cellAt(world, 0, 0).active, false, "drain tile stays unactivated");
 });
 
 // --- Reactive drains (triggeredDrains) ---------------------------------------
@@ -483,7 +628,7 @@ test("triggeredDrains finds nothing on a quiet board", () => {
 
 test("triggeredDrains fires the moment a single neighbour lights up", () => {
   const world = build(["DC"]);
-  cellAt(world, 1, 0).activateAt = 0;
+  cellAt(world, 1, 0).active = true;
   const triggered = triggeredDrains(world);
   assertEqual(triggered.length, 1, "one drain triggered");
   assertEqual(triggered[0].targets, [cellAt(world, 1, 0)], "targets the newly lit neighbour");
@@ -497,8 +642,8 @@ test("a neighbour already lit, plus a fresh one, are both reported", () => {
     ".D.",
     ".C.",
   ]);
-  cellAt(world, 1, 0).activateAt = 0; // north, lit earlier
-  cellAt(world, 1, 2).activateAt = 0; // south, just lit
+  cellAt(world, 1, 0).active = true; // north, lit earlier
+  cellAt(world, 1, 2).active = true; // south, just lit
   const triggered = triggeredDrains(world);
   assertEqual(triggered.length, 1, "one drain triggered");
   const coords = triggered[0].targets.map((c) => `${c.x},${c.y}`).sort();
@@ -507,7 +652,7 @@ test("a neighbour already lit, plus a fresh one, are both reported", () => {
 
 test("triggeredDrains reports each triggered sink independently", () => {
   const world = build(["DCD"]);
-  cellAt(world, 1, 0).activateAt = 0;
+  cellAt(world, 1, 0).active = true;
   const triggered = triggeredDrains(world);
   const sinks = triggered.map((t) => `${t.sink.x},${t.sink.y}`).sort();
   assertEqual(sinks, ["0,0", "2,0"], "the lit crystal borders two drains, both fire");
@@ -523,25 +668,25 @@ test("end to end: separate taps near a drain each get absorbed immediately", () 
     ".D.",
     ".C.",
   ]);
-  for (const { cell } of computeCascade(world, cellAt(world, 1, 0))) cell.activateAt = 0;
+  for (const { cell } of computeCascade(world, cellAt(world, 1, 0))) cell.active = true;
   for (const { sink, targets } of triggeredDrains(world)) {
-    for (const target of targets) target.activateAt = null;
+    for (const target of targets) target.active = false;
   }
-  assertEqual(cellAt(world, 1, 0).activateAt, null, "north absorbed the instant it lit");
+  assertEqual(cellAt(world, 1, 0).active, false, "north absorbed the instant it lit");
 
-  for (const { cell } of computeCascade(world, cellAt(world, 1, 2))) cell.activateAt = 0;
+  for (const { cell } of computeCascade(world, cellAt(world, 1, 2))) cell.active = true;
   for (const { sink, targets } of triggeredDrains(world)) {
-    for (const target of targets) target.activateAt = null;
+    for (const target of targets) target.active = false;
   }
-  assertEqual(cellAt(world, 1, 2).activateAt, null, "south absorbed too, on its own separate tap");
+  assertEqual(cellAt(world, 1, 2).active, false, "south absorbed too, on its own separate tap");
 });
 
 // --- Level parsing ----------------------------------------------------------
 
 test("parses a valid level", () => {
   const world = build(["C.", ".C"]);
-  assertEqual(world.width, 2, "width");
-  assertEqual(world.height, 2, "height");
+  assertEqual(world.level.width, 2, "width");
+  assertEqual(world.level.height, 2, "height");
   assertEqual(world.cells.length, 4, "cell count");
   assertEqual(cellAt(world, 0, 0).type, "crystal", "top left");
   assertEqual(cellAt(world, 1, 0).type, "desert", "top right");
@@ -624,14 +769,14 @@ test("rejects a completionGoal above 1", () => {
 
 test("parses valid energyBudget and completionGoal", () => {
   const world = build(["C."], { energyBudget: 3, completionGoal: 0.5 });
-  assertEqual(world.energyBudget, 3, "energyBudget");
-  assertEqual(world.completionGoal, 0.5, "completionGoal");
+  assertEqual(world.level.energyBudget, 3, "energyBudget");
+  assertEqual(world.level.completionGoal, 0.5, "completionGoal");
   assertEqual(world.energy, 3, "energy starts at budget");
 });
 
 test("powerPlantBoost defaults to 5 when omitted", () => {
   const world = build(["C."]);
-  assertEqual(world.powerPlantBoost, 5, "default boost");
+  assertEqual(world.level.powerPlantBoost, 5, "default boost");
 });
 
 test("rejects a negative powerPlantBoost", () => {
@@ -647,14 +792,14 @@ test("rejects a negative powerPlantBoost", () => {
 
 test("parses a custom powerPlantBoost", () => {
   const world = build(["C."], { powerPlantBoost: 12 });
-  assertEqual(world.powerPlantBoost, 12, "custom boost");
+  assertEqual(world.level.powerPlantBoost, 12, "custom boost");
 });
 
 test("colony knobs default sensibly when omitted", () => {
   const world = build(["C."]);
-  assertEqual(world.foodPerFarm, 1, "default foodPerFarm");
-  assertEqual(world.mineYield, 2, "default mineYield");
-  assertEqual(world.starvationPenalty, 1, "default starvationPenalty");
+  assertEqual(world.level.foodPerFarm, 1, "default foodPerFarm");
+  assertEqual(world.level.mineYield, 2, "default mineYield");
+  assertEqual(world.level.starvationPenalty, 1, "default starvationPenalty");
 });
 
 test("rejects a negative foodPerFarm", () => {
@@ -692,9 +837,9 @@ test("rejects a negative starvationPenalty", () => {
 
 test("parses custom colony knobs", () => {
   const world = build(["C."], { foodPerFarm: 4, mineYield: 7, starvationPenalty: 3 });
-  assertEqual(world.foodPerFarm, 4, "custom foodPerFarm");
-  assertEqual(world.mineYield, 7, "custom mineYield");
-  assertEqual(world.starvationPenalty, 3, "custom starvationPenalty");
+  assertEqual(world.level.foodPerFarm, 4, "custom foodPerFarm");
+  assertEqual(world.level.mineYield, 7, "custom mineYield");
+  assertEqual(world.level.starvationPenalty, 3, "custom starvationPenalty");
 });
 
 // --- Level serialization (the editor's save path) ----------------------------
@@ -706,7 +851,7 @@ test("serializeLevel round-trips an edited board", () => {
   assertEqual(record.name, "edited", "name");
   assertEqual(record.grid, ["CD", ".C"], "the edit shows up in the grid");
 
-  const reparsed = parseLevel(record);
+  const reparsed = createRun(parseLevel(record));
   assertEqual(cellAt(reparsed, 1, 0).type, "drain", "re-parses back to the edited type");
 });
 
@@ -782,8 +927,21 @@ const summary = document.getElementById("summary");
       assert(rawLevels.some((r) => r.name === "simple test"), "has the simple test level");
     });
 
+    // Plays a level through the *real* rules — the same resolveTap/applyTap
+    // game.js's pointerdown calls, not a reimplementation of them. That's the
+    // whole point of rules.js: a walkthrough asserted here can't quietly
+    // disagree with what the game actually does.
+    function play(record, taps) {
+      const run = createRun(parseLevel(record));
+      const blocked = [];
+      for (const [x, y] of taps) {
+        if (!tap(run, cellAt(run, x, y)).ok) blocked.push(`${x},${y}`);
+      }
+      return { run, blocked, fraction: activatedFraction(run) };
+    }
+
     const data = rawLevels.find((r) => r.name === "simple test");
-    const world = parseLevel(data);
+    const world = createRun(parseLevel(data));
     const crystals = world.cells.filter((c) => c.type === "crystal");
 
     test("shipped level: density is near half", () => {
@@ -804,33 +962,20 @@ const summary = document.getElementById("summary");
     });
 
     test("shipped level: completion goal is reachable within the energy budget", () => {
-      // A constructive check, not an optimality proof: this is one sequence
-      // of taps a player could make (the power plant, then any one more
-      // crystal), simulated on a fresh world so it can't disturb the other
-      // tests sharing `world` above. It only shows the level *can* be won,
-      // not the best way to.
-      const sim = parseLevel(data);
-      let energy = sim.energyBudget;
-      let activated = 0;
+      // A constructive check, not an optimality proof: one sequence of taps a
+      // player could actually make (the power plant, then one more crystal
+      // well outside its reach), played through the real rules on a fresh run
+      // so it can't disturb the other tests sharing `world` above. It shows
+      // the level *can* be won, not the best way to win it.
+      const { run, blocked, fraction } = play(data, [[2, 1], [9, 0]]);
 
-      function tap(x, y) {
-        if (energy <= 0) return;
-        const cascade = computeCascade(sim, cellAt(sim, x, y));
-        if (cascade.length === 0) return;
-        for (const { cell } of cascade) cell.activateAt = 0;
-        energy -= 1;
-        activated += cascade.length;
-      }
-
-      tap(2, 1); // the power plant
-      tap(9, 0); // one more crystal, well outside the plant's reach
-
-      const fraction = activated / sim.cells.length;
+      assertEqual(blocked, [], "both taps should land");
       assert(
-        fraction >= sim.completionGoal,
+        fraction >= run.level.completionGoal,
         `power plant + one more tap reaches ${(fraction * 100).toFixed(1)}%, ` +
-        `need ${(sim.completionGoal * 100).toFixed(1)}%`
+        `need ${(run.level.completionGoal * 100).toFixed(1)}%`
       );
+      assert(run.energy > 0, `and inside the budget (had ${run.energy} left)`);
     });
 
     test("levels.json contains recolonized", () => {
@@ -839,113 +984,116 @@ const summary = document.getElementById("summary");
 
     const recoData = rawLevels.find((r) => r.name === "recolonized");
 
-    // Mirrors game.js's pointerdown exactly: a direct tap pays the tapped
-    // building's own activationCost out of the energy pool; everything the
-    // resulting cascade reaches beyond it is free, paid for by the
-    // network's own signal. Resolves the colony after every tap, exactly
-    // like game.js's applyColonyTick.
-    function directTap(sim, state, x, y) {
-      if (state.energy <= 0) return false;
-      const cell = cellAt(sim, x, y);
-      const cascade = computeCascade(sim, cell);
-      if (cascade.length === 0) return false;
-      const cost = buildingFor(cell).activationCost ?? 1;
-      if (state.energy < cost) return false;
-      for (const { cell: target } of cascade) target.activateAt = 0;
-      state.energy -= cost;
-      const { energyDelta } = resolveColony(sim);
-      state.energy = Math.max(0, state.energy + energyDelta);
-      return true;
-    }
+    const RECO = {
+      plant: [3, 6],
+      res: [[2, 0], [3, 0], [4, 0]],
+      mines: [[2, 2], [3, 2], [4, 2]],
+      trap: [5, 0],
+    };
 
     test("recolonized: completion goal is reachable via the colony loop", () => {
       // Constructive check: one cheap direct tap on the power plant (cost 1)
       // reaches the whole crystal network *for free* — the 3 farms and the
       // 8-cell ring — establishing food capacity before anyone has moved in.
-      // Mines and residential sit off the network on purpose (see
-      // design.md) and need their own direct taps. A mine only pays out
-      // once the colony has both food *and* at least one resident to work
-      // it (see colony.js), so the only order that works interleaves the
-      // two: one resident to seed population, then a mine to start income,
-      // repeated — (5,0)'s 4th residential is a trap, left untapped.
-      const sim = parseLevel(recoData);
-      const state = { energy: sim.energyBudget };
+      // Mines and residential sit off the network on purpose (see design.md)
+      // and need their own direct taps. A mine only pays out once the colony
+      // has both food *and* at least one resident to work it (colony.js), so
+      // the order that works interleaves the two: one resident to seed
+      // population, then a mine to start income, repeated. The 4th
+      // residential at (5,0) is a trap, left untapped.
+      const { run, blocked, fraction } = play(recoData, [
+        RECO.plant,
+        RECO.res[0], RECO.mines[0],
+        RECO.res[1], RECO.mines[1],
+        RECO.res[2], RECO.mines[2],
+      ]);
 
-      directTap(sim, state, 3, 6); // the power plant — lights the whole network for 1
-      directTap(sim, state, 2, 0); directTap(sim, state, 2, 2); // res1, mine1 (now paying out)
-      directTap(sim, state, 3, 0); directTap(sim, state, 3, 2); // res2, mine2
-      directTap(sim, state, 4, 0); directTap(sim, state, 4, 2); // res3, mine3
-
-      const activated = sim.cells.filter((c) => c.activateAt !== null).length;
-      const fraction = activated / sim.cells.length;
+      assertEqual(blocked, [], "every tap in the intended order should succeed");
       assert(
-        fraction >= sim.completionGoal,
+        fraction >= run.level.completionGoal,
         `colony + network reaches ${(fraction * 100).toFixed(1)}%, ` +
-        `need ${(sim.completionGoal * 100).toFixed(1)}%`
+        `need ${(run.level.completionGoal * 100).toFixed(1)}%`
       );
-      assert(state.energy > 0, `should still have energy to spare (had ${state.energy})`);
+      assert(run.energy > 0, `should still have energy to spare (had ${run.energy})`);
+    });
+
+    test("recolonized: one tap on the power plant lights the whole network for 1", () => {
+      // The level's opening move, and the clearest demonstration that
+      // propagation past the tapped cell is free.
+      const { run, fraction } = play(recoData, [RECO.plant]);
+      const lit = run.cells.filter((c) => c.active).length;
+      assertEqual(lit, 15, "plant + spine + 3 farms + the 8-cell ring");
+      assertEqual(run.energy, run.level.energyBudget - 1, "and it cost exactly the plant's own cost");
+      assert(fraction < run.level.completionGoal, "but not enough on its own to win");
+      assertEqual(resolveColony(run).foodCapacity, 3, "the 3 farms it lit are feeding");
     });
 
     test("recolonized: tapping all residential before any mine is a losing order", () => {
-      // Population before any mine exists to pay for it: no income arrives
-      // at all, so this order runs out of energy with nothing left it can
-      // afford, well short of the completion goal.
-      const sim = parseLevel(recoData);
-      const state = { energy: sim.energyBudget };
+      // Population before any mine exists to pay for it: no income arrives at
+      // all, so this order runs out of energy with nothing left it can
+      // afford, short of the completion goal.
+      const { run, fraction } = play(recoData, [RECO.plant, ...RECO.res]);
 
-      directTap(sim, state, 3, 6); // the power plant — same free network as above
-      directTap(sim, state, 2, 0); directTap(sim, state, 3, 0); directTap(sim, state, 4, 0); // residential first, no income yet
-
-      const stillAffordsAMine = state.energy >= buildingFor(cellAt(sim, 2, 2)).activationCost;
-      assert(!stillAffordsAMine, `wrong order should leave too little energy for a mine (had ${state.energy})`);
-
-      const activated = sim.cells.filter((c) => c.activateAt !== null).length;
-      const fraction = activated / sim.cells.length;
-      assert(fraction < sim.completionGoal, "stuck short of the goal, exactly the trap this order is meant to be");
+      assert(
+        !resolveTap(run, cellAt(run, ...RECO.mines[0])).ok,
+        `wrong order should leave too little energy for a mine (had ${run.energy})`
+      );
+      assert(fraction < run.level.completionGoal, "stuck short of the goal, exactly the trap this order is meant to be");
     });
 
     test("recolonized: tapping all mines before any resident is also a losing order", () => {
-      // The other wrong order: income before anyone exists to earn it. A
-      // mine with 0 population is trivially "fed" (0 <= any capacity) but
-      // produces nothing — colony.js requires population > 0, not just
-      // fed — so these taps are pure cost with no payoff, and the level
-      // strands the same way tapping residential-only does.
-      const sim = parseLevel(recoData);
-      const state = { energy: sim.energyBudget };
+      // The other wrong order: income before anyone exists to earn it. A mine
+      // with 0 population is trivially "fed" (0 <= any capacity) but produces
+      // nothing — colony.js requires population > 0, not just fed — so these
+      // taps are pure cost with no payoff.
+      const { run, fraction } = play(recoData, [RECO.plant, RECO.mines[0], RECO.mines[1]]);
 
-      directTap(sim, state, 3, 6); // the power plant
-      directTap(sim, state, 2, 2); directTap(sim, state, 3, 2); // 2 of 3 mines, zero population throughout
-
-      assertEqual(state.energy, sim.energyBudget - 1 - 3 - 3, "mines with nobody to work them pay no income");
-      const stillAffordsAThirdMine = state.energy >= buildingFor(cellAt(sim, 4, 2)).activationCost;
-      assert(!stillAffordsAThirdMine, `wrong order should leave too little energy for the 3rd mine (had ${state.energy})`);
-
-      const activated = sim.cells.filter((c) => c.activateAt !== null).length;
-      const fraction = activated / sim.cells.length;
-      assert(fraction < sim.completionGoal, "stuck short of the goal, same trap from the other direction");
+      assertEqual(run.energy, run.level.energyBudget - 1 - 3 - 3, "mines with nobody to work them pay no income");
+      assert(
+        !resolveTap(run, cellAt(run, ...RECO.mines[2])).ok,
+        `wrong order should leave too little energy for the 3rd mine (had ${run.energy})`
+      );
+      assert(fraction < run.level.completionGoal, "stuck short of the goal, same trap from the other direction");
     });
 
-    test("recolonized: overbuilding residential without enough farms starves the colony", () => {
-      const sim = parseLevel(recoData);
-      cellAt(sim, 2, 0).activateAt = 0; // one residential, zero farms
-      const colony = resolveColony(sim);
-      assert(!colony.fed, "1 population with 0 food capacity is unfed");
-      assert(colony.energyDelta < 0, "an unfed colony bleeds energy");
+    test("recolonized: the trap residential starves the colony, and culling it is free", () => {
+      // End to end through the real rules: finish the level, then tap the 4th
+      // residential (2 energy, and there's no food for them), then cull it.
+      const { run } = play(recoData, [
+        RECO.plant,
+        RECO.res[0], RECO.mines[0],
+        RECO.res[1], RECO.mines[1],
+        RECO.res[2], RECO.mines[2],
+      ]);
+      const beforeTrap = run.energy;
+
+      tap(run, cellAt(run, ...RECO.trap));
+      const starving = resolveColony(run);
+      assertEqual(starving.fed, false, "4 population against 3 food");
+      assert(run.energy < beforeTrap, "starving costs the trap's own price plus the shortfall");
+
+      // The cull: free, and it takes the colony straight back to fed.
+      const cull = resolveTap(run, cellAt(run, ...RECO.trap));
+      assertEqual(cull.kind, "cull", "an active residential resolves as a cull, not a no-op");
+      assertEqual(cull.energyCost, 0, "culling is free");
+      const afterStarving = run.energy;
+      applyTap(run, cull);
+      assertEqual(resolveColony(run).fed, true, "fed again immediately");
+      assert(run.energy >= afterStarving, "and the cull itself never costs energy");
     });
 
-    test("recolonized: culling an unfed residential is free and fixes it", () => {
-      const sim = parseLevel(recoData);
-      let energy = sim.energyBudget - buildingFor(cellAt(sim, 2, 0)).activationCost; // as if just tapped
-      cellAt(sim, 2, 0).activateAt = 0; // one residential, zero farms — unfed
-      energy = Math.max(0, energy + resolveColony(sim).energyDelta);
-      const afterOverbuild = energy;
-
-      cellAt(sim, 2, 0).activateAt = null; // the free cull, see game.js
-      energy = Math.max(0, energy + resolveColony(sim).energyDelta);
-
-      assertEqual(energy, afterOverbuild, "culling itself costs nothing");
-      assertEqual(resolveColony(sim).fed, true, "colony is fed again with 0 population");
+    test("recolonized: finishing the level exhausts the board", () => {
+      const { run } = play(recoData, [
+        RECO.plant,
+        RECO.res[0], RECO.mines[0],
+        RECO.res[1], RECO.mines[1],
+        RECO.res[2], RECO.mines[2],
+        RECO.trap,
+      ]);
+      assert(!hasProductiveMove(run), "nothing productive left, even with energy to spare");
+      assert(run.energy > 0, "and this is a board-exhaustion ending, not an out-of-energy one");
     });
+
   } catch (error) {
     failed++;
     add("fail", "shipped level set could not be loaded");

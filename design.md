@@ -769,6 +769,104 @@ Tapping it still exhausts the board mid-starvation and wins immediately;
 culling it still un-starves the colony, restores mining income, and clears
 `outcome` until the trap is retapped — verified again at the new budget.
 
+## Milestone 12 — Rules in one place, presentation in another
+
+Eleven milestones of "add one more thing to `game.js`" had produced a
+950-line module that owned layout, input, five DOM modals, six icon
+drawing routines, tile painting, outcome logic, level-list management,
+the render loop — *and* the actual rules of the game. Nothing here changes
+what the game does; it's about where the game lives. Every number in both
+shipped levels is byte-for-byte identical before and after, verified by
+replaying "recolonized"'s full walkthrough in the browser and getting the
+same 21/96 and ⚡9.
+
+**The turn rule existed three times, and that was the real problem.** What
+happens when you tap a cell lived inside a `pointerdown` handler; the test
+suite had a hand-copied `directTap` that reimplemented it (and silently
+omitted the drain and cull branches entirely); and `hasProductiveMove` was
+a third partial copy of "would this do something, and can I afford it".
+Every rebalance meant editing the same rule in two files and hoping they
+agreed. `rules.js` now holds it once:
+
+- `resolveTap(world, cell)` is **pure** — it answers *what would tapping
+  here do* without doing it, returning `{ kind, ok, energyCost, ... }`
+  where kind is `"cull"`, `"drain"` or `"activate"`, and a failed tap says
+  whether it failed for `"noop"` or `"energy"` reasons.
+- `applyTap(world, tap, now)` is the only thing that mutates.
+- `hasProductiveMove` is now three lines over `resolveTap`, so
+  board-exhaustion detection *cannot* disagree with what tapping actually
+  does — affordability included.
+
+The tests call the same two functions the player's finger does. The purity
+split is also what any future undo would be built on: a resolved tap
+already describes exactly what it's about to change.
+
+**Simulation state and animation state are no longer the same field.**
+`cell.activateAt` was doing two unrelated jobs — *is this cell active*
+(`!== null`) and *when should it appear to light up* (a `performance.now()`
+timestamp). That forced tests to write `activateAt = 0` as a magic "active"
+sentinel and made the rules quietly depend on the animation clock. Now
+`cell.active` is a boolean the rules read, and `cell.litAt` is presentation
+only. `applyTap` takes a `now` purely to stamp the ripple; pass nothing and
+everything lands at once, which is exactly what a test wants.
+
+**A level and a run of it are separate objects.** `parseLevel` returns an
+immutable *level* (size, legend, tile types, goal, budget, knobs);
+`createRun(level)` returns the mutable state of one attempt (energy, and
+per-cell activation). Replaying is another `createRun` on the same level
+rather than re-reading and re-validating JSON, and a run can be
+snapshotted as energy plus one boolean per cell without dragging the level
+definition along. Everything that needs a knob reads `world.level.X`.
+
+**The colony economy is declared, not branched on.** `resolveColony` used
+to name three flags (`houses`/`feeds`/`mines`) and hardcode one arithmetic
+expression, which meant `design.md`'s own promise that future jobs could
+"opt in the same way mine did" was false — they couldn't. Buildings now
+declare resources:
+
+```js
+residential: { colony: { stocks: { population: 1 } } }
+farm:        { colony: { stocks: { food: "foodPerFarm" } } }
+mine:        { colony: { flows: { energy: "mineYield" }, requiresLabor: true } }
+```
+
+*Stocks* are recounted from the board every tap (what the colony **is**);
+*flows* are added to the energy pool every tap (what it **earns**). An
+amount is a literal number or the name of a level knob, so "how much does a
+farm feed" stays level-tunable without `colony.js` knowing which knob
+belongs to which building. Adding a building that produces a new resource
+is one table entry. What deliberately *isn't* generic yet is the
+fed/starving rule itself — that's the colony's one piece of real game
+design, and it stays concrete until a second rule of the same shape shows
+up to generalize against.
+
+**Level numbers are a table, not four near-identical stanzas.** Every
+numeric field a level carries is declared once in `LEVEL_NUMBERS` with its
+default and bounds; parsing, validation and serialization all read it.
+Adding a knob used to be four edits across two files.
+
+**`game.js` split four ways**, and is now roughly wiring only: `icons.js`
+(vector glyphs, rasterization, bitmap icons), `tiles.js` (`paintTile` and
+the swatch helper every DOM surface uses), `hud.js` (HUD, outcome screen,
+error screen), `modals.js` (all five DOM screens behind one small
+framework). Three smaller fixes came along with it:
+
+- **HUD button hitboxes are computed, not assigned mid-draw.** `drawHud`
+  used to measure its labels and set the hitboxes as a side effect of
+  rendering, so input depended on a frame having already happened.
+  `hudLayout()` returns them; the caller keeps them and recomputes on
+  resize and on edit-mode changes.
+- **`paintTile` takes `iconOverrides` as an argument** instead of reaching
+  for a module global — it was the only impure thing left in the render
+  path.
+- **The outcome screen stopped lying.** Every loss said "Out of energy",
+  but board exhaustion can end a run with energy still in the pool. A loss
+  that way now says "Nothing left to do".
+- **A building's usual legend character lives on the building**
+  (`legendChar`), not in a lookup table in `game.js` — adding a type had
+  quietly required editing two files, against this document's own "one
+  entry in the table" rule.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -798,6 +896,11 @@ culling it still un-starves the colony, restores mining income, and clears
 | Drain keeps its own flat cost, not tied to `activationCost` | It isn't part of the activation network — it never lights up, so there's no "its own cost" question to unify |
 | "Recolonized" connects the crystal network to farms/ring but walls mines and residential off with desert | Demonstrates the network's payoff (one cheap tap lights 15 cells) while keeping "which colony tile do I afford next" a real decision the network can't shortcut |
 | Mine income requires `population > 0`, not just `population <= foodCapacity` | "Fed" was trivially true at population 0, so mines with nobody working them paid out anyway — never the intent, just an unchecked edge of the `<=` comparison |
+| The turn rule is one pure `resolveTap` plus one mutating `applyTap` (`rules.js`) | It previously existed three times — in the input handler, hand-copied into tests, and again inside board-exhaustion detection — and they drifted; a pure "what would this do" is also the seam undo would need |
+| `cell.active` (simulation) is separate from `cell.litAt` (presentation) | One field was answering both "does this count" and "when does it animate", which made the rules depend on the animation clock and forced tests to use a magic timestamp as a boolean |
+| `parseLevel` returns an immutable level; `createRun` returns one attempt at it | Replaying shouldn't mean re-reading and re-validating JSON, and a run worth snapshotting is energy plus one boolean per cell — not the level definition too |
+| Colony contributions are declared resources (`stocks`/`flows`), not named capability flags | "New jobs opt in the same way mine did" was only true on paper while the economy was one hardcoded expression over three specific flags |
+| Level numbers are declared once in a table with defaults and bounds | Each knob previously needed four near-identical edits across two files to add |
 
 ## Open questions
 

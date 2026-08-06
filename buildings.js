@@ -32,12 +32,32 @@
 // cascade.js. Boost lives on the level, not a hardcoded number here, so
 // different levels can tune it without a new building type.
 //
-// houses/feeds/mines are capability flags for the colony economy (see
-// colony.js): an activated houses building counts toward population, feeds
-// toward food capacity, mines toward energy income when the colony is fed.
-// The colony economy itself is still resolved fresh every tap, separately
-// from cascades — resolveColony only ever reads activateAt, so it doesn't
-// care whether a cell got there by direct tap or by propagation.
+// colony describes how an activated building participates in the colony
+// economy (see colony.js), as declared resources rather than named flags:
+//
+//   stocks — resources recounted from scratch every tap, describing what the
+//     board currently *is* (population, food capacity). Not accumulated.
+//   flows  — resources added to the player's pool every tap, describing what
+//     the board currently *earns* (energy). Accumulated.
+//   requiresLabor — this building only produces its flows while the colony
+//     is fed and someone actually lives there. A mine with nobody to work it
+//     earns nothing.
+//
+// An amount is either a literal number or the *name* of a level knob (see
+// level.js's LEVEL_NUMBERS), looked up per level — so "how much does a farm
+// feed" stays level-tunable without colony.js knowing which knob belongs to
+// which building. Adding a building that produces a brand-new resource takes
+// one entry here and nothing else; colony.js sums whatever it finds.
+//
+// The colony economy is resolved fresh every tap, separately from cascades —
+// resolveColony only ever reads cell.active, so it doesn't care whether a
+// cell got there by direct tap or by propagation.
+//
+// legendChar is the character this type is written as in a level file's grid.
+// Levels carry their own legend (a level may spell crystal any way it likes),
+// but this is the character the editor reaches for when a level gains a type
+// its legend has never seen — so a type's "usual" letter lives with the type,
+// not in a separate table somewhere else.
 //
 // toggle: true means tapping an already-activated cell of this type
 // deactivates it instead of no-opping — see game.js. Residential is the
@@ -75,6 +95,7 @@ export const BUILDINGS = {
   desert: {
     id: "desert",
     name: "Desert",
+    legendChar: ".",
     inert: true,
     fill: "#181e27",
     stroke: "#20283340",
@@ -83,6 +104,7 @@ export const BUILDINGS = {
   crystal: {
     id: "crystal",
     name: "Crystal",
+    legendChar: "C",
     inert: false,
     fill: "#1b2732",
     stroke: "#35505f",
@@ -97,6 +119,7 @@ export const BUILDINGS = {
   redCrystal: {
     id: "redCrystal",
     name: "Red Crystal",
+    legendChar: "R",
     inert: false,
     fill: "#2a1c20",
     stroke: "#5c2a34",
@@ -115,6 +138,7 @@ export const BUILDINGS = {
   greenCrystal: {
     id: "greenCrystal",
     name: "Green Crystal",
+    legendChar: "G",
     inert: false,
     fill: "#1a2015",
     stroke: "#3d4d22",
@@ -133,6 +157,7 @@ export const BUILDINGS = {
   powerPlant: {
     id: "powerPlant",
     name: "Power Plant",
+    legendChar: "P",
     inert: false,
     fill: "#2a2415",
     stroke: "#5b4c22",
@@ -141,7 +166,7 @@ export const BUILDINGS = {
     iconColor: "#fbbf24",
     shape: "bolt",
     activationCost: 1,
-    // See world.powerPlantBoost (level.js) for the actual amount.
+    // See the level's powerPlantBoost (level.js) for the actual amount.
     boostKey: "powerPlantBoost",
     propagate: propagateOrthogonal,
   },
@@ -149,6 +174,7 @@ export const BUILDINGS = {
   residential: {
     id: "residential",
     name: "Residential",
+    legendChar: "H",
     inert: false,
     fill: "#131f2c",
     stroke: "#2c5170",
@@ -159,7 +185,7 @@ export const BUILDINGS = {
     // Costlier than crystal on purpose: a crystal network can spill into a
     // colony cluster, but rarely deep — see mine's activationCost below.
     activationCost: 2,
-    houses: true,
+    colony: { stocks: { population: 1 } },
     toggle: true,
     propagate: propagateOrthogonal,
   },
@@ -167,6 +193,7 @@ export const BUILDINGS = {
   farm: {
     id: "farm",
     name: "Farm",
+    legendChar: "F",
     inert: false,
     fill: "#131f16",
     stroke: "#29572f",
@@ -175,13 +202,14 @@ export const BUILDINGS = {
     iconColor: "#4ade80",
     shape: "leaf",
     activationCost: 2,
-    feeds: true,
+    colony: { stocks: { food: "foodPerFarm" } },
     propagate: propagateOrthogonal,
   },
 
   mine: {
     id: "mine",
     name: "Mine",
+    legendChar: "M",
     inert: false,
     fill: "#24141a",
     stroke: "#5c2a34",
@@ -193,13 +221,14 @@ export const BUILDINGS = {
     // *reached* by a strong enough crystal chain, but it eats most of
     // whatever signal is left, so propagation rarely survives past one.
     activationCost: 3,
-    mines: true,
+    colony: { flows: { energy: "mineYield" }, requiresLabor: true },
     propagate: propagateOrthogonal,
   },
 
   drain: {
     id: "drain",
     name: "Drain",
+    legendChar: "D",
     inert: true,
     fill: "#241c2c",
     stroke: "#3c2d47",
@@ -214,7 +243,7 @@ export const BUILDINGS = {
     // Tapping a drain deactivates every orthogonally adjacent activated
     // cell, regardless of type. It never activates anything itself.
     drain(world, cell) {
-      return orthogonalNeighbours(world, cell).filter((n) => n.activateAt !== null);
+      return orthogonalNeighbours(world, cell).filter((n) => n.active);
     },
   },
 };

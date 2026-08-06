@@ -1,4 +1,4 @@
-// Level loading and validation.
+// Level loading, validation, and starting a run.
 //
 // A level is a JSON record: a size, a legend mapping characters to building
 // type ids, and the grid as an array of row strings. Row strings mean a level
@@ -8,23 +8,89 @@
 // Levels ship as a *set* — a JSON array of these records, each named — not
 // one file per level, so the game can offer a list to choose from without a
 // separate index. serializeLevel() below is the inverse of parseLevel(): it
-// turns a live, possibly-edited world back into the same record shape, for
-// the level editor to hand to storage.js.
+// turns a live, possibly-edited run back into the same record shape, for the
+// level editor to hand to storage.js.
+//
+// **Level and run are separate objects, on purpose.** parseLevel returns a
+// *level*: the immutable definition (size, legend, tile types, goal, budget,
+// tuning knobs). createRun turns one into a *world*: the mutable state of one
+// attempt at it (energy left, which cells are active). Replaying a level is
+// then just another createRun on the same level — no re-reading JSON, no
+// revalidating, and no chance of inheriting stale per-cell state from the
+// previous attempt. It also means a run can be snapshotted (energy plus one
+// boolean per cell) without dragging the whole level definition along, which
+// is what any future undo would need.
 //
 // Validation is strict and loud. A malformed level should fail at load with a
 // message naming the problem, not render as a mysteriously wrong board.
 
 import { BUILDINGS } from "./buildings.js";
 
+// Every numeric field a level carries, declared once. Adding a knob means one
+// entry here — parsing, validation, defaulting and serialization all read
+// this table, rather than each growing another near-identical stanza.
+//
+//   required — must be present; otherwise `default` is used when omitted
+//   integer  — must be a whole number
+//   min/max  — inclusive bounds, unless exclusiveMin says otherwise
+//   label    — how the field is described in an error message
+const LEVEL_NUMBERS = {
+  energyBudget: {
+    required: true, integer: true, min: 1,
+    label: "a positive integer energyBudget",
+  },
+  completionGoal: {
+    required: true, min: 0, max: 1, exclusiveMin: true,
+    label: "completionGoal between 0 (exclusive) and 1 (inclusive)",
+  },
+  // How much a power plant boosts signal passing through it. Unlike
+  // activation cost, which is a property of the building *type* (see
+  // buildings.js), boost stays level-tunable: "how far can a plant reach" is
+  // a real level-design lever.
+  powerPlantBoost: { default: 5, min: 0, label: "powerPlantBoost" },
+  // The colony economy's knobs — see colony.js for how they combine, and
+  // buildings.js for which building refers to which by name.
+  foodPerFarm: { default: 1, min: 0, label: "foodPerFarm" },
+  mineYield: { default: 2, min: 0, label: "mineYield" },
+  starvationPenalty: { default: 1, min: 0, label: "starvationPenalty" },
+};
+
+function parseNumbers(data) {
+  const out = {};
+  for (const [key, spec] of Object.entries(LEVEL_NUMBERS)) {
+    const raw = data[key];
+    if (raw === undefined) {
+      if (spec.required) throw new Error(`Level needs ${spec.label}`);
+      out[key] = spec.default;
+      continue;
+    }
+    const ok =
+      typeof raw === "number" &&
+      Number.isFinite(raw) &&
+      (!spec.integer || Number.isInteger(raw)) &&
+      (spec.min === undefined || (spec.exclusiveMin ? raw > spec.min : raw >= spec.min)) &&
+      (spec.max === undefined || raw <= spec.max);
+    if (!ok) {
+      throw new Error(
+        spec.required
+          ? `Level needs ${spec.label}`
+          : `Level's ${spec.label} must be a non-negative number`
+      );
+    }
+    out[key] = raw;
+  }
+  return out;
+}
+
+// Parses and validates a level record into an immutable level definition.
+// Its `cells` are plain {x, y, type} — the board's *shape*, with none of the
+// per-attempt state that createRun adds.
 export function parseLevel(data) {
   if (!data || typeof data !== "object") {
     throw new Error("Level is not an object");
   }
 
-  const {
-    name, size, legend, grid, energyBudget, completionGoal, powerPlantBoost,
-    foodPerFarm, mineYield, starvationPenalty,
-  } = data;
+  const { name, size, legend, grid } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -65,49 +131,8 @@ export function parseLevel(data) {
       if (!typeId) {
         throw new Error(`Unknown character '${char}' at row ${y}, column ${x}`);
       }
-      cells.push({
-        x,
-        y,
-        type: typeId,
-        // null until the cell is scheduled to light up. Once set, it holds the
-        // timestamp at which the cell becomes active — see cascade.js.
-        activateAt: null,
-        // null except briefly after a drain tile fires — holds the timestamp
-        // of that tap, purely for the self-pulse animation. See game.js.
-        drainedAt: null,
-      });
+      cells.push({ x, y, type: typeId });
     }
-  }
-
-  if (!Number.isInteger(energyBudget) || energyBudget < 1) {
-    throw new Error("Level needs a positive integer energyBudget");
-  }
-  if (typeof completionGoal !== "number" || completionGoal <= 0 || completionGoal > 1) {
-    throw new Error("Level needs completionGoal between 0 (exclusive) and 1 (inclusive)");
-  }
-  // Optional: how much a power plant boosts signal passing through it.
-  // Unlike energyBudget/completionGoal there's no reason every level should
-  // have to choose one, so it defaults rather than being required. (Unlike
-  // activation cost, which is a property of the building *type* — see
-  // buildings.js — boost stays level-tunable, since "how far can a plant
-  // reach" is a real level-design lever.)
-  const resolvedPowerPlantBoost = powerPlantBoost === undefined ? 5 : powerPlantBoost;
-  if (typeof resolvedPowerPlantBoost !== "number" || resolvedPowerPlantBoost < 0) {
-    throw new Error("Level's powerPlantBoost must be a non-negative number");
-  }
-  // Optional, same reasoning again: the colony economy's three knobs. See
-  // colony.js for how they combine.
-  const resolvedFoodPerFarm = foodPerFarm === undefined ? 1 : foodPerFarm;
-  if (typeof resolvedFoodPerFarm !== "number" || resolvedFoodPerFarm < 0) {
-    throw new Error("Level's foodPerFarm must be a non-negative number");
-  }
-  const resolvedMineYield = mineYield === undefined ? 2 : mineYield;
-  if (typeof resolvedMineYield !== "number" || resolvedMineYield < 0) {
-    throw new Error("Level's mineYield must be a non-negative number");
-  }
-  const resolvedStarvationPenalty = starvationPenalty === undefined ? 1 : starvationPenalty;
-  if (typeof resolvedStarvationPenalty !== "number" || resolvedStarvationPenalty < 0) {
-    throw new Error("Level's starvationPenalty must be a non-negative number");
   }
 
   return {
@@ -118,23 +143,39 @@ export function parseLevel(data) {
     // Kept around (not just consumed above) so tools like the level editor
     // can know which building types this level's author actually chose.
     legend,
-    energyBudget,
-    completionGoal,
-    powerPlantBoost: resolvedPowerPlantBoost,
-    foodPerFarm: resolvedFoodPerFarm,
-    mineYield: resolvedMineYield,
-    starvationPenalty: resolvedStarvationPenalty,
-    // Mutable: energy spent tapping cells. Reset to energyBudget to replay.
-    energy: energyBudget,
+    ...parseNumbers(data),
+  };
+}
+
+// Starts a fresh attempt at `level`: full energy, nothing activated. The
+// level itself is shared by reference (it's never mutated by play), while
+// every cell gets its own mutable state.
+//
+// A cell's `active` is the simulation's truth — whether it counts, feeds,
+// mines, or conducts. `litAt` and `drainedAt` are presentation only: when the
+// cell should *appear* to light up, and when a drain last flashed. Keeping
+// those apart means the rules never depend on the animation clock, and a run
+// can be reasoned about (or replayed, or snapshotted) with no clock at all.
+export function createRun(level) {
+  return {
+    level,
+    energy: level.energyBudget,
+    cells: level.cells.map((cell) => ({
+      x: cell.x,
+      y: cell.y,
+      // Mutable: the level editor retypes cells in place on the live run.
+      type: cell.type,
+      active: false,
+      litAt: null,
+      drainedAt: null,
+    })),
   };
 }
 
 // Loads and validates every record in a level set up front — a malformed
 // level anywhere in the set fails loudly at startup, not confusingly later
 // when a player happens to pick it. Returns the raw records, not parsed
-// worlds: each one gets parsed fresh (via parseLevel) only once actually
-// selected, so playing/resetting a level never reuses another's mutable
-// per-cell state.
+// levels: each one is parsed only once actually selected.
 export async function loadLevelSet(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -153,37 +194,33 @@ export async function loadLevelSet(url) {
   return data;
 }
 
-// The inverse of parseLevel: turns a live world (cells may have had their
-// type edited in place by the level editor) back into a plain JSON-shaped
-// level record under the given name. Only tile types can differ from the
-// record this world was parsed from — energyBudget, completionGoal,
-// powerPlantBoost, foodPerFarm, mineYield and starvationPenalty are carried
-// through unchanged, since editing never touches them.
+// The inverse of parseLevel: turns a live run (whose cells may have been
+// retyped in place by the level editor) back into a plain JSON-shaped level
+// record under the given name. Only tile types can differ from the level this
+// run started from — every number is carried through unchanged, since editing
+// never touches them.
 export function serializeLevel(world, name) {
+  const { level } = world;
   const charFor = {};
-  for (const [char, typeId] of Object.entries(world.legend)) {
+  for (const [char, typeId] of Object.entries(level.legend)) {
     if (!(typeId in charFor)) charFor[typeId] = char;
   }
 
   const grid = [];
-  for (let y = 0; y < world.height; y++) {
+  for (let y = 0; y < level.height; y++) {
     let row = "";
-    for (let x = 0; x < world.width; x++) {
-      row += charFor[world.cells[y * world.width + x].type];
+    for (let x = 0; x < level.width; x++) {
+      row += charFor[world.cells[y * level.width + x].type];
     }
     grid.push(row);
   }
 
-  return {
+  const record = {
     name,
-    size: { width: world.width, height: world.height },
-    energyBudget: world.energyBudget,
-    completionGoal: world.completionGoal,
-    powerPlantBoost: world.powerPlantBoost,
-    foodPerFarm: world.foodPerFarm,
-    mineYield: world.mineYield,
-    starvationPenalty: world.starvationPenalty,
-    legend: world.legend,
-    grid,
+    size: { width: level.width, height: level.height },
   };
+  for (const key of Object.keys(LEVEL_NUMBERS)) record[key] = level[key];
+  record.legend = level.legend;
+  record.grid = grid;
+  return record;
 }

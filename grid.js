@@ -1,9 +1,12 @@
 // Grid geometry helpers. Kept separate from buildings.js and level.js so both
 // can use them without importing each other.
 
+// Takes a run (see level.js's createRun): the board's dimensions come from
+// its level definition, the cells themselves are the run's mutable ones.
 export function cellAt(world, x, y) {
-  if (x < 0 || y < 0 || x >= world.width || y >= world.height) return null;
-  return world.cells[y * world.width + x];
+  const { width, height } = world.level;
+  if (x < 0 || y < 0 || x >= width || y >= height) return null;
+  return world.cells[y * width + x];
 }
 
 const HORIZONTAL = [[1, 0], [-1, 0]];
