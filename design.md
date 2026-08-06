@@ -867,6 +867,41 @@ framework). Three smaller fixes came along with it:
   quietly required editing two files, against this document's own "one
   entry in the table" rule.
 
+## Milestone 13 — The run ends on a choice, not an instruction
+
+Three small UI changes, all about where a control belongs.
+
+**Legend moved to the left, next to the level name.** It's a reference for
+what's on the board, so it belongs with the board's identity — not crowded
+in with the two buttons that change *what you're playing*. The right-hand
+side is now just `edit` and `level` (`restart` and `save as` while
+editing), which reads as one group with one job.
+
+**"Retry" became "level".** It always opened the level picker; calling it
+retry described what you'd usually do next, not what the button did. The
+picker already highlights the level you're on, so re-picking it is still
+the one-tap replay it always was — the label just stopped mis-describing
+the mechanism.
+
+**The outcome screen has buttons.** It used to say "tap retry to try
+again", which was an instruction to go find a control somewhere else. Now
+a loss offers `retry`, and a win offers `retry` and — only when there's
+actually a next level in the set — `next level`, styled as the primary
+action. Replaying is `createRun` on the level already in memory, which
+Milestone 12's level/run split made free.
+
+**They deliberately don't swallow every tap.** The obvious implementation
+blocks the board entirely while the outcome is up, on the reasoning that
+you shouldn't tap "through" a modal. That would have quietly broken the
+recovery Milestone 6 built on purpose: a run that ends at 0 energy with a
+starving colony can still be rescued by culling a residential, which
+restarts mining income, pushes energy back above 0, and clears the
+outcome. Culling is free and ungated precisely so a starving colony is
+never permanently locked — and swallowing taps here would have turned that
+into a forced loss through the UI instead of through the rules. So the
+outcome buttons take priority, and a tap that misses them still reaches
+the board underneath.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -901,6 +936,8 @@ framework). Three smaller fixes came along with it:
 | `parseLevel` returns an immutable level; `createRun` returns one attempt at it | Replaying shouldn't mean re-reading and re-validating JSON, and a run worth snapshotting is energy plus one boolean per cell — not the level definition too |
 | Colony contributions are declared resources (`stocks`/`flows`), not named capability flags | "New jobs opt in the same way mine did" was only true on paper while the economy was one hardcoded expression over three specific flags |
 | Level numbers are declared once in a table with defaults and bounds | Each knob previously needed four near-identical edits across two files to add |
+| The outcome screen's buttons take priority over the board but don't block it | Blocking every tap would break the free-cull recovery from a starving colony at 0 energy — a forced loss imposed by the UI rather than the rules |
+| "Next level" appears only when the level set actually has one | A dead or wrapping button is a worse answer than not offering the choice |
 
 ## Open questions
 

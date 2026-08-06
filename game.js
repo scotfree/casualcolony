@@ -17,10 +17,11 @@ import { buildingFor, BUILDINGS } from "./buildings.js";
 import { paintTile } from "./tiles.js";
 import * as modals from "./modals.js";
 import {
-  HUD_HEIGHT, BOARD_MARGIN, hudLayout, hitsButton, drawHud, drawOutcome, drawError,
+  HUD_HEIGHT, BOARD_MARGIN, hudLayout, outcomeLayout, hitsButton,
+  drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.15.0";
+const VERSION = "0.16.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -63,6 +64,8 @@ let originX = 0;
 let originY = 0;
 // HUD button rects, recomputed whenever their labels could have changed.
 let buttons = { reset: null, edit: null, legend: null };
+// Outcome-screen button rects, or null while a run is still in progress.
+let outcomeButtons = null;
 
 // The cell the open tile picker is editing, or null the rest of the time.
 let pickerCell = null;
@@ -79,6 +82,7 @@ function resize() {
   canvas.height = Math.round(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   relayoutHud();
+  relayoutOutcome();
 
   if (!world) return;
 
@@ -93,16 +97,34 @@ function resize() {
   originY = Math.round(HUD_HEIGHT + (availableHeight - boardHeight) / 2);
 }
 
-// The buttons' hitboxes depend on their labels, which change with edit mode —
-// so this runs on resize and on every mode change, never as a side effect of
-// drawing.
+// The buttons' hitboxes depend on their labels — which change with edit mode,
+// and on the level's name, since legend sits just past it. So this runs on
+// resize, on every mode change, and whenever the level changes; never as a
+// side effect of drawing.
 function relayoutHud() {
-  buttons = hudLayout(ctx, width, editMode);
+  buttons = hudLayout(ctx, width, editMode, world ? world.level.name : "");
+}
+
+// Likewise for the outcome screen's own buttons, which only exist while an
+// outcome is showing and depend on whether there's a next level to offer.
+function relayoutOutcome() {
+  outcomeButtons = outcome
+    ? outcomeLayout(ctx, width, height, outcome, nextLevelRecord() !== null)
+    : null;
 }
 
 function setEditMode(on) {
   editMode = on;
   relayoutHud();
+}
+
+// The level after the current one in the list, or null if this is the last —
+// "next level" is only offered when there's somewhere to go.
+function nextLevelRecord() {
+  if (!world) return null;
+  const index = levelList.findIndex((record) => record.name === world.level.name);
+  if (index === -1 || index + 1 >= levelList.length) return null;
+  return levelList[index + 1];
 }
 
 // A ResizeObserver watches the canvas box itself, so geometry can't go stale
@@ -113,7 +135,8 @@ new ResizeObserver(resize).observe(canvas);
 // --- Run lifecycle ----------------------------------------------------------
 
 // Starts a fresh run of `level`, leaving edit mode: loading a level and
-// editing the previous one are two different things.
+// editing the previous one are two different things. Replaying is just this
+// again with the same level — no re-reading the level file (see level.js).
 function startRun(level) {
   world = createRun(level);
   outcome = null;
@@ -236,6 +259,24 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
+  // The outcome screen's own buttons take priority over the board underneath
+  // them. A tap that *misses* them still falls through, on purpose: a run that
+  // ended at 0 energy with a starving colony can still be rescued by culling a
+  // residential (free and never gated — see below), which restarts mining
+  // income and clears the outcome. Swallowing every tap here would quietly
+  // turn that recovery into a forced loss.
+  if (outcome && !editMode && outcomeButtons) {
+    if (hitsButton(outcomeButtons.retry, hudX, hudY)) {
+      startRun(world.level);
+      return;
+    }
+    if (hitsButton(outcomeButtons.next, hudX, hudY)) {
+      const next = nextLevelRecord();
+      if (next) loadLevelByRecord(next);
+      return;
+    }
+  }
+
   const cell = cellFromPoint(event.clientX, event.clientY);
   if (!cell) return;
 
@@ -250,8 +291,12 @@ canvas.addEventListener("pointerdown", (event) => {
   applyTap(world, resolved, performance.now());
 
   // A free cull can pull energy back above 0 by fixing "fed" status — if that
-  // happens the run isn't over after all, so clear any outcome reached for it.
-  if (world.energy > 0) outcome = null;
+  // happens the run isn't over after all, so clear any outcome reached for it
+  // (and the buttons that came with it).
+  if (world.energy > 0 && outcome) {
+    outcome = null;
+    relayoutOutcome();
+  }
   boardExhausted = !hasProductiveMove(world);
 });
 
@@ -298,6 +343,7 @@ function updateOutcome(now) {
     result: activatedFraction(world) >= world.level.completionGoal ? "win" : "lose",
     reason: outOfEnergy ? "energy" : "exhausted",
   };
+  relayoutOutcome();
 }
 
 function render(now) {
@@ -326,7 +372,10 @@ function render(now) {
   // Not while editing — the outcome screen would otherwise block the board
   // you're trying to click, and edit mode always ends in a reset anyway.
   if (outcome && !editMode) {
-    drawOutcome(ctx, width, height, outcome, activatedFraction(world), world.level.completionGoal);
+    drawOutcome(
+      ctx, width, height, outcome,
+      activatedFraction(world), world.level.completionGoal, outcomeButtons
+    );
   }
 }
 

@@ -18,24 +18,41 @@ const BUTTON = "#c7d3de";
 const GOOD = "#5eead4";
 const BAD = "#f87171";
 
-// Where the HUD's three buttons sit, right-aligned and measured against their
-// current labels (which change in edit mode). Pure: give it a context to
-// measure with and it tells you the rects, changing nothing.
-export function hudLayout(ctx, width, editMode) {
+// Where the HUD's buttons sit, measured against their current labels (which
+// change in edit mode). Pure: give it a context to measure with and it tells
+// you the rects, changing nothing.
+//
+// Legend sits on the *left*, immediately after the level name — it's a
+// reference for what's on the board, so it belongs with the board's identity
+// rather than crowded in with the two buttons that change what you're
+// playing.
+export function hudLayout(ctx, width, editMode, name = "") {
   ctx.font = LABEL_FONT;
   const rects = {};
-  let right = width - 14;
 
-  const buttons = [
-    ["reset", editMode ? "save as" : "retry", 26],
+  const legendLeft = 14 + ctx.measureText(name).width + 16;
+  const legendWidth = ctx.measureText("legend").width;
+  rects.legend = {
+    label: "legend",
+    align: "left",
+    textAt: legendLeft,
+    x: legendLeft - 10,
+    y: 0,
+    w: legendWidth + 20,
+    h: HUD_HEIGHT,
+  };
+
+  // The two that change what you're playing, laid out right to left.
+  let right = width - 14;
+  for (const [key, label, padding] of [
+    ["reset", editMode ? "save as" : "level", 26],
     ["edit", editMode ? "restart" : "edit", 24],
-    ["legend", "legend", 24],
-  ];
-  for (const [key, label, padding] of buttons) {
+  ]) {
     const textWidth = ctx.measureText(label).width;
     rects[key] = {
       label,
-      textRight: right,
+      align: "right",
+      textAt: right,
       x: right - textWidth - padding / 2,
       y: 0,
       w: textWidth + padding,
@@ -72,13 +89,58 @@ export function drawHud(ctx, width, view, layout) {
   ctx.textAlign = "center";
   ctx.fillText(statsText, width / 2, row2);
 
-  ctx.textAlign = "right";
-  ctx.fillStyle = BUTTON;
-  ctx.fillText(layout.reset.label, layout.reset.textRight, row1);
-  ctx.fillStyle = view.editMode ? GOOD : BUTTON;
-  ctx.fillText(layout.edit.label, layout.edit.textRight, row1);
-  ctx.fillStyle = BUTTON;
-  ctx.fillText(layout.legend.label, layout.legend.textRight, row1);
+  for (const [key, color] of [
+    ["legend", BUTTON],
+    ["reset", BUTTON],
+    ["edit", view.editMode ? GOOD : BUTTON],
+  ]) {
+    const button = layout[key];
+    ctx.textAlign = button.align;
+    ctx.fillStyle = color;
+    ctx.fillText(button.label, button.textAt, row1);
+  }
+}
+
+const OUTCOME_BUTTON_HEIGHT = 36;
+const OUTCOME_BUTTON_GAP = 10;
+
+// Where the outcome screen's buttons sit. A loss offers "retry"; a win offers
+// "retry" and — only when there actually is one — "next level", so the run
+// always ends on a real choice rather than an instruction to go find a button
+// somewhere else.
+export function outcomeLayout(ctx, width, height, outcome, hasNext) {
+  ctx.font = LABEL_FONT;
+  const labels = [["retry", "retry"]];
+  if (outcome.result === "win" && hasNext) labels.push(["next", "next level"]);
+
+  const widths = labels.map(([, label]) => Math.max(96, Math.round(ctx.measureText(label).width) + 36));
+  const total = widths.reduce((a, b) => a + b, 0) + OUTCOME_BUTTON_GAP * (labels.length - 1);
+
+  let x = Math.round((width - total) / 2);
+  const y = Math.round(height / 2 + 28);
+  const rects = {};
+  labels.forEach(([key, label], i) => {
+    rects[key] = { label, x, y, w: widths[i], h: OUTCOME_BUTTON_HEIGHT, primary: key === "next" };
+    x += widths[i] + OUTCOME_BUTTON_GAP;
+  });
+  return rects;
+}
+
+function drawOutcomeButton(ctx, button) {
+  const accent = button.primary ? GOOD : BUTTON;
+  ctx.beginPath();
+  ctx.roundRect(button.x, button.y, button.w, button.h, 9);
+  ctx.fillStyle = button.primary ? "#173a37" : "#1b232e";
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = button.primary ? "#2f6f66" : "#38485a";
+  ctx.stroke();
+
+  ctx.fillStyle = accent;
+  ctx.font = LABEL_FONT;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(button.label, button.x + button.w / 2, button.y + button.h / 2 + 0.5);
 }
 
 // outcome: { result: "win" | "lose", reason: "energy" | "exhausted" }
@@ -87,8 +149,8 @@ export function drawHud(ctx, width, view, layout) {
 // run with energy still in the pool (a self-sustaining colony runs out of
 // things to do long before it runs out of energy), so reporting every loss as
 // "Out of energy" would be plainly false half the time.
-export function drawOutcome(ctx, width, height, outcome, fraction, completionGoal) {
-  ctx.fillStyle = "#12161ccc";
+export function drawOutcome(ctx, width, height, outcome, fraction, completionGoal, layout) {
+  ctx.fillStyle = "#12161ce6";
   ctx.fillRect(0, HUD_HEIGHT, width, height - HUD_HEIGHT);
 
   ctx.textAlign = "center";
@@ -101,14 +163,15 @@ export function drawOutcome(ctx, width, height, outcome, fraction, completionGoa
       : outcome.reason === "energy"
         ? "Out of energy"
         : "Nothing left to do";
-  ctx.fillText(headline, width / 2, height / 2 - 14);
+  ctx.fillText(headline, width / 2, height / 2 - 30);
 
   ctx.fillStyle = MUTED;
   ctx.font = LABEL_FONT;
   const goalPct = Math.round(completionGoal * 100);
   const gotPct = Math.round(fraction * 100);
-  ctx.fillText(`${gotPct}% activated · goal was ${goalPct}%`, width / 2, height / 2 + 14);
-  ctx.fillText("tap retry to try again", width / 2, height / 2 + 36);
+  ctx.fillText(`${gotPct}% activated · goal was ${goalPct}%`, width / 2, height / 2 - 2);
+
+  for (const button of Object.values(layout)) drawOutcomeButton(ctx, button);
 }
 
 export function drawError(ctx, width, height, message) {
