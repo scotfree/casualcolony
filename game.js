@@ -9,7 +9,14 @@
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
 import { loadLevelSet, parseLevel, createRun, serializeLevel } from "./level.js";
-import { loadSavedLevels, saveLevel, loadIconOverrides, saveIconOverride } from "./storage.js";
+import {
+  loadSavedLevels, saveLevel, saveLevels, loadIconOverrides, saveIconOverride,
+  saveIconOverrides, clearLocalEdits, hasLocalEdits,
+} from "./storage.js";
+import { SHIPPED_ICONS } from "./icons-data.js";
+import {
+  exportLevelsText, exportIconsText, parseImport, LEVELS_FILENAME, ICONS_FILENAME,
+} from "./exchange.js";
 import { resolveColony, hasColony } from "./colony.js";
 import { resolveTap, applyTap, hasProductiveMove, activatedFraction } from "./rules.js";
 import { cellAt } from "./grid.js";
@@ -21,7 +28,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.16.1";
+const VERSION = "0.17.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -44,10 +51,12 @@ let editMode = false;
 // localStorage, merged by name. Raw records, not parsed levels.
 let levelList = [];
 
-// Custom-drawn icons, keyed by building type id, loaded once up front (a
-// synchronous localStorage read, unlike the level set) so even the very first
-// frame reflects anything already saved.
-let iconOverrides = loadIconOverrides();
+// Custom-drawn icons, keyed by building type id: whatever ships with the game
+// (icons-data.js, a static import so it's ready before the first frame),
+// with this device's own saved edits layered on top. Both are synchronous —
+// an icon that arrived late would show as a visible flash of the default
+// shape, unlike the level set, which can be fetched.
+let iconOverrides = { ...SHIPPED_ICONS, ...loadIconOverrides() };
 
 // Whether any remaining tap could still change the board — recomputed after
 // every successful tap, not every frame, since taps are the only thing that
@@ -167,6 +176,62 @@ function saveAs(name) {
 
 // --- Modal wiring -----------------------------------------------------------
 
+function showLevelPicker() {
+  modals.openLevelPicker({
+    levels: levelList,
+    currentName: world.level.name,
+    onPick: (record) => { loadLevelByRecord(record); modals.closeModal(); },
+    onManageData: showDataMenu,
+  });
+}
+
+// Getting edits out of this device and into the repo, and back again — see
+// exchange.js for why that's the shape of it.
+function showDataMenu() {
+  modals.openDataMenu({
+    hasLocal: hasLocalEdits(),
+    // Both texts are built now, before any handler awaits anything: Safari
+    // drops the user-gesture token across an await, and a clipboard write
+    // without it fails silently.
+    onExportLevels: () => modals.openTextExport({
+      title: "export levels",
+      hint: "The whole of levels/levels.json — shipped levels with this device's edits merged in. Replace that file with this and commit.",
+      text: exportLevelsText(levelList),
+      filename: LEVELS_FILENAME,
+    }),
+    onExportIcons: () => modals.openTextExport({
+      title: "export icons",
+      hint: "The whole of icons-data.js. Replace that file with this and commit, and the icons ship for everyone.",
+      text: exportIconsText(iconOverrides),
+      filename: ICONS_FILENAME,
+    }),
+    onImport: () => modals.openTextImport({
+      onLoad: (text) => {
+        // parseImport throws with a reason; openTextImport shows it.
+        const result = parseImport(text);
+        if (result.kind === "levels") {
+          saveLevels(result.levels);
+          levelList = mergeLevelLists(levelList, result.levels);
+          // Re-enter whichever level is now current, so an edited copy of the
+          // level being played takes effect rather than sitting unused.
+          const current = levelList.find((r) => r.name === world.level.name);
+          if (current) loadLevelByRecord(current);
+        } else {
+          saveIconOverrides(result.icons);
+          iconOverrides = { ...iconOverrides, ...result.icons };
+        }
+        modals.closeModal();
+      },
+    }),
+    onClearLocal: () => {
+      clearLocalEdits();
+      // Simplest honest way back to "the repo is the truth": reload, so every
+      // shipped level and icon is re-read from scratch with nothing shadowing.
+      location.reload();
+    },
+  });
+}
+
 function showTilePicker(cell) {
   pickerCell = cell;
   modals.openTilePicker({
@@ -250,11 +315,7 @@ canvas.addEventListener("pointerdown", (event) => {
         onSave: (name) => { saveAs(name); modals.closeModal(); },
       });
     } else {
-      modals.openLevelPicker({
-        levels: levelList,
-        currentName: world.level.name,
-        onPick: (record) => { loadLevelByRecord(record); modals.closeModal(); },
-      });
+      showLevelPicker();
     }
     return;
   }

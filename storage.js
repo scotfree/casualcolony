@@ -48,3 +48,38 @@ export function saveIconOverride(typeId, rows) {
   all[typeId] = rows;
   localStorage.setItem(ICON_STORAGE_KEY, JSON.stringify(all));
 }
+
+// Replaces every locally-saved level in one go — the import half of
+// exchange.js. Existing saved levels not named in `records` are left alone,
+// same as saving them one at a time would.
+export function saveLevels(records) {
+  const all = readAll(STORAGE_KEY);
+  for (const record of records) all[record.name] = record;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+}
+
+// Likewise for icons.
+export function saveIconOverrides(icons) {
+  const all = readAll(ICON_STORAGE_KEY);
+  for (const [typeId, rows] of Object.entries(icons)) all[typeId] = rows;
+  localStorage.setItem(ICON_STORAGE_KEY, JSON.stringify(all));
+}
+
+// Throws away every local edit, so whatever ships in the repo becomes the
+// truth again on this device. The counterpart to exporting and committing:
+// until local copies are cleared they keep shadowing the shipped files (a
+// saved level shadows a shipped one by name), which means further edits are
+// edits to a shadow, and later changes to the shipped file are silently
+// ignored here.
+export function clearLocalEdits() {
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(ICON_STORAGE_KEY);
+}
+
+// Whether anything is currently shadowing the shipped files on this device.
+export function hasLocalEdits() {
+  return (
+    Object.keys(readAll(STORAGE_KEY)).length > 0 ||
+    Object.keys(readAll(ICON_STORAGE_KEY)).length > 0
+  );
+}

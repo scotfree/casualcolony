@@ -27,6 +27,9 @@ import { resolveTap, applyTap, tap, hasProductiveMove, activatedFraction } from 
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
+import { exportLevelsText, exportIconsText, parseImport } from "./exchange.js";
+import { SHIPPED_ICONS } from "./icons-data.js";
+import { ICON_GRID_SIZE } from "./icons.js";
 
 const results = document.getElementById("results");
 let passed = 0;
@@ -477,6 +480,99 @@ test("foodPerFarm scales how much one farm feeds", () => {
 test("hasColony only reports boards that actually use the colony economy", () => {
   assertEqual(hasColony(build(["CCP"])), false, "a crystal-only level has no colony");
   assertEqual(hasColony(build(["C.M"])), true, "one mine is enough");
+});
+
+// --- Export / import (exchange.js) -------------------------------------------
+//
+// The bridge between localStorage and the repo. Pure text in, pure text out,
+// so it tests directly.
+
+// A valid icon: ICON_GRID_SIZE rows of ICON_GRID_SIZE "#"/"." characters.
+function stubIcon(char = "#") {
+  return Array.from({ length: ICON_GRID_SIZE }, () => char.repeat(ICON_GRID_SIZE));
+}
+
+test("exportLevelsText emits the whole file, and it parses back", () => {
+  const records = [buildLevel(["C."]), buildLevel([".C"])].map((level, i) =>
+    serializeLevel(createRun(level), `level ${i}`)
+  );
+  const text = exportLevelsText(records);
+  const back = JSON.parse(text);
+  assertEqual(back.length, 2, "both levels survive the round trip");
+  assertEqual(back[0].name, "level 0", "names preserved");
+  assert(text.endsWith("\n"), "ends with a newline, like a committed file");
+  // And the result is loadable by the real parser, not just valid JSON.
+  for (const record of back) parseLevel(record);
+});
+
+test("exportIconsText emits a valid module that round-trips through parseImport", () => {
+  const text = exportIconsText({ mine: stubIcon(), farm: stubIcon(".") });
+  assert(text.includes("export const SHIPPED_ICONS"), "it's a module, not bare JSON");
+  const result = parseImport(text);
+  assertEqual(result.kind, "icons", "re-importing the exported file gives icons back");
+  assertEqual(result.icons.mine, stubIcon(), "and the pixels survive");
+});
+
+test("exportIconsText drops anything that isn't a real building type", () => {
+  const text = exportIconsText({ mine: stubIcon(), notAType: stubIcon() });
+  const { icons } = parseImport(text);
+  assertEqual(Object.keys(icons), ["mine"], "only known types are written out");
+});
+
+test("parseImport tells levels from icons without being told which", () => {
+  const levels = exportLevelsText([serializeLevel(createRun(buildLevel(["C."])), "one")]);
+  assertEqual(parseImport(levels).kind, "levels", "an array is levels");
+  assertEqual(parseImport(exportIconsText({ mine: stubIcon() })).kind, "icons", "an object is icons");
+});
+
+test("parseImport accepts a bare icons object as well as the whole file", () => {
+  const bare = JSON.stringify({ mine: stubIcon() });
+  assertEqual(parseImport(bare).kind, "icons", "pasting just the object works too");
+});
+
+test("parseImport rejects a level that wouldn't actually load", () => {
+  const broken = JSON.stringify([{
+    name: "broken",
+    size: { width: 2, height: 1 },
+    legend: { ".": "desert" },
+    grid: ["..."],           // three characters in a two-wide level
+    energyBudget: 1,
+    completionGoal: 0.5,
+  }]);
+  assertThrows(() => parseImport(broken), "broken");
+});
+
+test("parseImport rejects an icon of the wrong shape", () => {
+  assertThrows(
+    () => parseImport(JSON.stringify({ mine: ["##", "##"] })),
+    `${ICON_GRID_SIZE} rows`
+  );
+});
+
+test("parseImport rejects an icon for a type that doesn't exist", () => {
+  assertThrows(
+    () => parseImport(JSON.stringify({ nosuchtype: stubIcon() })),
+    "Unknown building type"
+  );
+});
+
+test("parseImport complains usefully about junk", () => {
+  assertThrows(() => parseImport("not json at all"), "Not valid JSON");
+  assertThrows(() => parseImport(""), "Nothing to import");
+  assertThrows(() => parseImport(JSON.stringify({ a: 1 })), "Unknown building type");
+});
+
+test("shipped icons are a valid icon map", () => {
+  // Guards the file people paste export output into: a malformed icon there
+  // would render as garbage on every device, not just the one that made it.
+  for (const [id, rows] of Object.entries(SHIPPED_ICONS)) {
+    assert(BUILDINGS[id], `shipped icon '${id}' is a real building type`);
+    assertEqual(rows.length, ICON_GRID_SIZE, `shipped icon '${id}' has the right row count`);
+    for (const row of rows) {
+      assertEqual(row.length, ICON_GRID_SIZE, `shipped icon '${id}' row width`);
+      assert(/^[#.]+$/.test(row), `shipped icon '${id}' uses only # and .`);
+    }
+  }
 });
 
 // --- Rules (resolveTap / applyTap) -------------------------------------------

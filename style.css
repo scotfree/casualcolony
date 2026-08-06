@@ -254,3 +254,53 @@ body {
   border-color: #2a3441;
   color: #6b7f91;
 }
+
+/* Export/import (exchange.js). The textarea isn't just a preview — it's the
+   delivery method of last resort: if the clipboard is denied and there's no
+   share sheet, the text is still on screen and selectable. */
+.modal-textarea {
+  background: #12161c;
+  border: 1px solid #2a3441;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 140px;
+  resize: vertical;
+  color: #c7d3de;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.modal-textarea:focus {
+  outline: none;
+  border-color: #5eead4;
+}
+
+.modal-note {
+  color: #8ea3b5;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.modal-row {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-row .modal-save {
+  flex: 1;
+}
+
+/* Sits below the level list as a way out to a different kind of action, not
+   another level to pick. */
+.option.subtle {
+  color: #8ea3b5;
+  border-top: 1px solid #2a3441;
+  border-radius: 0;
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.option.danger {
+  color: #f87171;
+}

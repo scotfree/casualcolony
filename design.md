@@ -902,6 +902,59 @@ into a forced loss through the UI instead of through the rules. So the
 outcome buttons take priority, and a tap that misses them still reaches
 the board underneath.
 
+## Milestone 14 — Edits can leave the device they were made on
+
+The level editor (Milestone 4) and the icon editor (Milestone 8) both wrote
+to localStorage, because a static site has nowhere to POST. That worked as
+persistence but not as *authoring*: an edit existed on exactly one device,
+nobody else ever saw it, and clearing Safari's storage destroyed it. This
+milestone builds the bridge back to the repo.
+
+**Export produces the file, not a dump.** The obvious version — copy
+localStorage to the clipboard and paste it somewhere — makes the human do a
+merge, by hand, into the middle of a file. Instead `exchange.js` emits
+*exactly the contents the repo file should have*: `exportLevelsText` returns
+the whole of `levels/levels.json` (shipped levels with this device's edits
+already merged, since that's what `levelList` holds), and `exportIconsText`
+returns the whole of `icons-data.js`. Committing is then a whole-file
+replace, and the diff shows only what actually changed. `serializeLevel`
+already did the hard part.
+
+**Icons had to become shippable first.** Levels had a repo representation;
+icons didn't — they were a localStorage-only concept, so "persist my icon"
+had nowhere to persist *to*. `icons-data.js` is that home, and it's a static
+ES module rather than fetched JSON on purpose: an icon has to exist before
+the first frame or tiles visibly flash their default shape, and a static
+import resolves before any of that while a `fetch` doesn't. localStorage
+still layers on top at startup (`{ ...SHIPPED_ICONS, ...loadIconOverrides() }`),
+so editing an icon on a device still overrides the shipped one there.
+
+**One paste box, no mode to pick.** `parseImport` works out whether it was
+handed levels or icons — an array versus an object — so there's no toggle to
+set first and therefore no way to set it wrong. It also accepts the whole
+`icons-data.js` file, not just the object inside it, because pasting back
+the exact text you were handed should work. Every level is validated through
+the real `parseLevel` before *any* of them are accepted; a half-imported set
+would be worse than a rejected one.
+
+**Delivery is layered, with a floor that always works.** Clipboard
+everywhere, plus a share sheet where `navigator.canShare({files})` says
+files are supported — which on iOS means AirDrop straight to a laptop, the
+thing that actually makes phone-side authoring practical. Underneath both,
+the textarea itself: if the clipboard is denied and there's no share sheet,
+the text is still on screen and selectable. The export text is built
+*before* the click handler awaits anything, because Safari drops the
+user-gesture token across an `await` and the clipboard write then fails
+silently.
+
+**"Clear local edits" is the step that makes the loop actually close.**
+After exporting and committing, the local copies are still there, still
+shadowing the now-identical shipped files — so further edits are edits to a
+shadow, and later changes to the shipped file are silently ignored on that
+device. Clearing them hands authority back to the repo. It takes two taps
+and only appears when there's something to clear, because it discards work
+that exists nowhere else and is only correct *after* a commit has landed.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -938,6 +991,10 @@ the board underneath.
 | Level numbers are declared once in a table with defaults and bounds | Each knob previously needed four near-identical edits across two files to add |
 | The outcome screen's buttons take priority over the board but don't block it | Blocking every tap would break the free-cull recovery from a starving colony at 0 energy — a forced loss imposed by the UI rather than the rules |
 | "Next level" appears only when the level set actually has one | A dead or wrapping button is a worse answer than not offering the choice |
+| Export emits whole file contents, not a localStorage dump | Committing becomes a file replace with a readable diff, instead of a hand-merge into the middle of something |
+| Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
+| Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
+| Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
 
 ## Open questions
 
