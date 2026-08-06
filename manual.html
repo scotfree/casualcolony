@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.18</span>
+  <span class="kicker">Field Edition · v0.19</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -872,6 +872,35 @@
       starving colony with no way back; a free one never can.
     </p>
 
+    <h3 class="h">Fog — what you can see, and therefore do</h3>
+    <p class="prose">
+      Some levels are fogged. On those, you can only see a short distance
+      around anything that's activated — and <strong>you can only tap what
+      you can see.</strong> A tile in the dark isn't an expensive move,
+      it's not a move at all; tapping it does nothing. Lighting something up
+      extends your sight from there, so the board unfolds as you work
+      outward. <em>Recolonized</em> uses a fog distance of 2.
+    </p>
+    <p class="prose">
+      Sight behaves nothing like a cascade, on purpose. A cascade travels
+      only through connected tiles and pays each one's activation cost; fog
+      is a plain distance that <strong>ignores terrain entirely and crosses
+      desert freely</strong>. So fog often shows you a cluster your network
+      can't reach — which is exactly the hint that it's worth spending a
+      direct tap over there. Once you've seen a tile it stays on screen,
+      dimmed, even if it falls back into the dark: fog never makes you
+      re-learn a board you've already explored, it just stops you acting at
+      a distance.
+    </p>
+    <p class="prose">
+      Two things fog can never do. It can't hide anything you've activated —
+      an active tile always lights its own square — so it can never strip
+      progress from view, and it can never block the free cull that rescues
+      a starving colony. And because it limits what's actionable, a run can
+      end with plenty of board left simply because nothing visible is worth
+      tapping.
+    </p>
+
     <h3 class="h">When you're not sure what just happened</h3>
     <p class="prose">
       Tap <strong>log</strong> in the top right. It shows what your most
@@ -913,6 +942,7 @@
         <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
         <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity</td></tr>
         <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
+        <tr><td>fogDistance</td><td class="val">2</td><td>How far you can see from anything lit (−1 = no fog)</td></tr>
       </table>
       <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere, and it's what a direct tap spends from your energy pool too: <strong>1</strong> for crystal (any color) and the power plant, <strong>2</strong> for residential and farm, <strong>3</strong> for a mine.</div>
     </div>
@@ -941,6 +971,15 @@
       <em>types</em>; the level's numbers (energy budget, completion goal,
       the colony knobs in Fig. 4) are set when a level is authored and
       aren't part of what edit mode touches.
+    </p>
+
+    <p class="prose">
+      The picker also has a <strong>starts visible</strong> checkbox. On a
+      fogged level that's how you set where the run begins: with nothing
+      visible there'd be nothing tappable at all, so a fogged board needs at
+      least one seed tile. Ticking it doesn't change what the tile
+      <em>is</em> — it's a separate property of that square, so the checkbox
+      stays open while you also pick a type.
     </p>
 
     <h3 class="h">Drawing a tile's icon</h3>
@@ -1050,7 +1089,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.18.0
+  Casual Colony — Player's Manual · built for v0.19.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">

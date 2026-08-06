@@ -50,8 +50,31 @@ function addTitle(parent, text) {
 // already uses — scoping to the level's own legend meant a level authored
 // before residential/farm/mine existed could never gain one through the
 // editor.
-export function openTilePicker({ currentType, iconOverrides, onSelect, onEditIcon }) {
+export function openTilePicker({
+  currentType, startsVisible, iconOverrides, onSelect, onEditIcon, onToggleStartsVisible,
+}) {
   open((parent) => {
+    // A fogged level needs somewhere to start — nothing visible means nothing
+    // tappable — so which cells seed sight is part of laying a board out, not
+    // a separate screen. Toggling doesn't close the picker: it's a property
+    // of the cell, independent of which building sits on it.
+    const seed = document.createElement("button");
+    seed.className = "option check" + (startsVisible ? " selected" : "");
+    seed.innerHTML = "";
+    const box = document.createElement("span");
+    box.className = "checkbox";
+    box.textContent = startsVisible ? "✓" : "";
+    seed.appendChild(box);
+    const seedLabel = document.createElement("span");
+    seedLabel.textContent = "starts visible";
+    seed.appendChild(seedLabel);
+    seed.addEventListener("click", () => {
+      const now = onToggleStartsVisible();
+      seed.classList.toggle("selected", now);
+      box.textContent = now ? "✓" : "";
+    });
+    parent.appendChild(seed);
+
     for (const building of Object.values(BUILDINGS)) {
       const row = document.createElement("div");
       row.className = "option-row";

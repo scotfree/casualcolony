@@ -43,6 +43,13 @@
     "foodPerFarm": 1,
     "mineYield": 2,
     "starvationPenalty": 1,
+    "fogDistance": 2,
+    "startsVisible": [
+      [
+        3,
+        6
+      ]
+    ],
     "legend": {
       ".": "desert",
       "C": "crystal",

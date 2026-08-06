@@ -25,6 +25,7 @@ import { computeCascade, triggeredDrains } from "./cascade.js";
 import { resolveColony, hasColony } from "./colony.js";
 import { resolveTap, applyTap, tap, hasProductiveMove, activatedFraction } from "./rules.js";
 import { describeTurn } from "./log.js";
+import { visibleCells } from "./visibility.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
@@ -481,6 +482,118 @@ test("foodPerFarm scales how much one farm feeds", () => {
 test("hasColony only reports boards that actually use the colony economy", () => {
   assertEqual(hasColony(build(["CCP"])), false, "a crystal-only level has no colony");
   assertEqual(hasColony(build(["C.M"])), true, "one mine is enough");
+});
+
+// --- Fog (visibility.js) -----------------------------------------------------
+//
+// Fog gates what you can *do*, so these check reach and — more importantly —
+// the invariants that stop it breaking other rules.
+
+function visibleSet(world) {
+  return new Set([...visibleCells(world)].map((c) => `${c.x},${c.y}`));
+}
+
+test("fogDistance -1 means no fog at all, the pre-fog behaviour", () => {
+  const world = build(["....", "....", "...."]);
+  assertEqual(world.level.fogDistance, -1, "and that's the default when omitted");
+  assertEqual(visibleCells(world).size, 12, "every cell visible with nothing active");
+});
+
+test("fog reaches a plain Manhattan radius, not a square", () => {
+  const world = build([
+    ".....",
+    ".....",
+    "..C..",
+    ".....",
+    ".....",
+  ], { fogDistance: 1, startsVisible: [[2, 2]] });
+  const seen = visibleSet(world);
+  assertEqual(seen.size, 5, "the centre plus its four orthogonal neighbours");
+  assert(seen.has("2,1") && seen.has("1,2"), "orthogonal neighbours are in");
+  assert(!seen.has("1,1"), "the diagonal is not — a square radius would smuggle diagonals in");
+});
+
+test("fog crosses desert, unlike a cascade", () => {
+  // The whole point of it being a separate mechanic: sight ignores terrain
+  // and cost, so it shows you across the gaps a network can't conduct across.
+  const world = build(["C...C"], { fogDistance: 3, startsVisible: [[0, 0]] });
+  const seen = visibleSet(world);
+  assert(seen.has("3,0"), "three tiles of desert away is still visible");
+  assertEqual(computeCascade(world, cellAt(world, 0, 0)).length, 1, "but the cascade stops dead at the desert");
+});
+
+test("activating something extends sight from there", () => {
+  // The seed lights (0,0) and (1,0); tapping (1,0) makes it a source of its
+  // own, which brings (2,0) into range. (Tapping (0,0) wouldn't: a bare
+  // crystal tap has nothing left over to light its neighbour, so no new
+  // source appears — see the cascade tests above.)
+  const world = build(["CC....."], { fogDistance: 1, startsVisible: [[0, 0]] });
+  assert(!visibleSet(world).has("2,0"), "out of reach to begin with");
+  tap(world, cellAt(world, 1, 0));
+  assert(visibleSet(world).has("2,0"), "lighting (1,0) brought (2,0) into range");
+});
+
+test("an active cell is always visible, so fog can never block a cull", () => {
+  // The invariant that keeps Milestone 6's promise intact: a starving colony
+  // must always be fixable. An active cell is zero steps from itself, so it
+  // is its own sight source no matter how tight the fog.
+  const world = build(["H......."], { fogDistance: 0, startsVisible: [[0, 0]] });
+  tap(world, cellAt(world, 0, 0));
+  assert(visibleCells(world).has(cellAt(world, 0, 0)), "still visible at fogDistance 0");
+  assertEqual(resolveTap(world, cellAt(world, 0, 0)).kind, "cull", "and still cullable");
+});
+
+test("a hidden tile isn't a move, and says so", () => {
+  const world = build(["C.....C"], { fogDistance: 1, startsVisible: [[0, 0]] });
+  const resolved = resolveTap(world, cellAt(world, 6, 0));
+  assertEqual(resolved.ok, false, "can't tap what you can't see");
+  assertEqual(resolved.reason, "hidden", "reported as unseen, not unaffordable");
+  assertEqual(resolved.energyCost, 0, "and it costs nothing, since nothing happened");
+});
+
+test("fog counts toward board exhaustion", () => {
+  // Agreed behaviour: a run can end because nothing *visible* is actionable,
+  // even with plenty of board and energy left.
+  const world = build(["C..C"], { fogDistance: 0, startsVisible: [[0, 0]] });
+  tap(world, cellAt(world, 0, 0));
+  assertEqual(hasProductiveMove(world), false, "the far crystal is unreachable, so the run is done");
+  assert(world.energy > 0, "and this is exhaustion, not running dry");
+});
+
+test("a seeded cell keeps providing sight for the whole run", () => {
+  // Not just turn one: the seed is the level's guaranteed foothold, so a run
+  // that lost its other sources can't be stranded with nothing tappable.
+  const world = build(["H.C"], { fogDistance: 2, startsVisible: [[0, 0]] });
+  tap(world, cellAt(world, 0, 0));   // activate the residential
+  tap(world, cellAt(world, 0, 0));   // and cull it again — no active cells left
+  assert(!world.cells.some((c) => c.active), "nothing active now");
+  assert(visibleCells(world).has(cellAt(world, 2, 0)), "the seed still lights the way");
+});
+
+test("a level records which cells seed sight, and round-trips them", () => {
+  const world = build(["C.", ".C"], { fogDistance: 2, startsVisible: [[1, 1]] });
+  assertEqual(cellAt(world, 1, 1).startsVisible, true, "parsed onto the cell");
+  assertEqual(cellAt(world, 0, 0).startsVisible, false, "and not onto others");
+
+  cellAt(world, 0, 0).startsVisible = true; // as the editor's checkbox would
+  const record = serializeLevel(world, "seeded");
+  assertEqual(record.startsVisible, [[0, 0], [1, 1]], "both written out, in board order");
+  assertEqual(record.fogDistance, 2, "and the fog setting travels with it");
+});
+
+test("an unfogged level writes no startsVisible at all", () => {
+  const record = serializeLevel(createRun(buildLevel(["C."])), "plain");
+  assertEqual("startsVisible" in record, false, "nothing added to a level that doesn't use it");
+});
+
+test("rejects a startsVisible outside the board", () => {
+  assertThrows(() => buildLevel(["C."], { startsVisible: [[9, 9]] }), "outside the board");
+  assertThrows(() => buildLevel(["C."], { startsVisible: ["nope"] }), "[x, y] pairs");
+});
+
+test("rejects a nonsense fogDistance", () => {
+  assertThrows(() => buildLevel(["C."], { fogDistance: -5 }), "fogDistance");
+  assertThrows(() => buildLevel(["C."], { fogDistance: 1.5 }), "fogDistance");
 });
 
 // --- Turn log (log.js) -------------------------------------------------------
@@ -1196,14 +1309,15 @@ const summary = document.getElementById("summary");
       // Mines and residential sit off the network on purpose (see design.md)
       // and need their own direct taps. A mine only pays out once the colony
       // has both food *and* at least one resident to work it (colony.js), so
-      // the order that works interleaves the two: one resident to seed
-      // population, then a mine to start income, repeated. The 4th
-      // residential at (5,0) is a trap, left untapped.
+      // the order that works interleaves the two. Fog decides which comes
+      // first: residential is unreachable until a mine is up (see below), so
+      // it goes mine, resident, mine, resident. The 4th residential at (5,0)
+      // is a trap, left untapped.
       const { run, blocked, fraction } = play(recoData, [
         RECO.plant,
-        RECO.res[0], RECO.mines[0],
-        RECO.res[1], RECO.mines[1],
-        RECO.res[2], RECO.mines[2],
+        RECO.mines[0], RECO.res[0],
+        RECO.mines[1], RECO.res[1],
+        RECO.mines[2], RECO.res[2],
       ]);
 
       assertEqual(blocked, [], "every tap in the intended order should succeed");
@@ -1226,17 +1340,22 @@ const summary = document.getElementById("summary");
       assertEqual(resolveColony(run).foodCapacity, 3, "the 3 farms it lit are feeding");
     });
 
-    test("recolonized: tapping all residential before any mine is a losing order", () => {
-      // Population before any mine exists to pay for it: no income arrives at
-      // all, so this order runs out of energy with nothing left it can
-      // afford, short of the completion goal.
-      const { run, fraction } = play(recoData, [RECO.plant, ...RECO.res]);
+    test("recolonized: residential is out of sight until a mine is online", () => {
+      // Fog is what enforces the order now, ahead of the economy: the
+      // residential row is more than fogDistance from anything the power
+      // plant's network lights, so it can't be tapped at all until a mine
+      // (which sits between them) is up. Tapping "wrong" isn't a bad trade
+      // here — it's not a move.
+      const { run } = play(recoData, [RECO.plant]);
+      for (const spot of RECO.res) {
+        const resolved = resolveTap(run, cellAt(run, ...spot));
+        assertEqual(resolved.ok, false, `residential at ${spot} shouldn't be reachable yet`);
+        assertEqual(resolved.reason, "hidden", "and specifically because it's unseen");
+      }
 
-      assert(
-        !resolveTap(run, cellAt(run, ...RECO.mines[0])).ok,
-        `wrong order should leave too little energy for a mine (had ${run.energy})`
-      );
-      assert(fraction < run.level.completionGoal, "stuck short of the goal, exactly the trap this order is meant to be");
+      // One mine changes that, for the residential beside it and no other.
+      tap(run, cellAt(run, ...RECO.mines[0]));
+      assertEqual(resolveTap(run, cellAt(run, ...RECO.res[0])).ok, true, "the mine brought its neighbour into sight");
     });
 
     test("recolonized: tapping all mines before any resident is also a losing order", () => {
@@ -1259,9 +1378,9 @@ const summary = document.getElementById("summary");
       // residential (2 energy, and there's no food for them), then cull it.
       const { run } = play(recoData, [
         RECO.plant,
-        RECO.res[0], RECO.mines[0],
-        RECO.res[1], RECO.mines[1],
-        RECO.res[2], RECO.mines[2],
+        RECO.mines[0], RECO.res[0],
+        RECO.mines[1], RECO.res[1],
+        RECO.mines[2], RECO.res[2],
       ]);
       const beforeTrap = run.energy;
 
@@ -1283,9 +1402,9 @@ const summary = document.getElementById("summary");
     test("recolonized: finishing the level exhausts the board", () => {
       const { run } = play(recoData, [
         RECO.plant,
-        RECO.res[0], RECO.mines[0],
-        RECO.res[1], RECO.mines[1],
-        RECO.res[2], RECO.mines[2],
+        RECO.mines[0], RECO.res[0],
+        RECO.mines[1], RECO.res[1],
+        RECO.mines[2], RECO.res[2],
         RECO.trap,
       ]);
       assert(!hasProductiveMove(run), "nothing productive left, even with energy to spare");

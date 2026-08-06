@@ -991,6 +991,79 @@ changed.
 keeps the two longer edit-mode labels from crowding the level name on a
 narrow phone.
 
+## Milestone 16 — Fog, and sight as a second kind of reach
+
+Fog of war and sensor towers were both in the original pitch and have sat
+under *Explicitly not doing yet* since. This is the first half: a
+`fogDistance` on the level, and visibility that gates what you can do.
+
+**Fog gates action, not just knowledge.** A tile you can't see can't be
+tapped. That distinction is what makes fog survive a deterministic board:
+levels are authored files with no RNG and retry is one tap, so a fog that
+only hid *information* would evaporate on the second attempt and leave
+behind nothing but a memorization tax. Gating action means knowing exactly
+where the mine is still doesn't help until you've got sight out to it.
+
+**But you never re-learn the board.** A cell that has ever been visible
+stays drawn, dimmed, for the rest of the run (`cell.seen`). Three states,
+answering three different questions: unseen (you don't know), seen-but-dark
+(you know, but can't act), visible (normal, tappable). Hiding what you'd
+already discovered would tax memory rather than skill, and would make the
+board lurch every time a cull dropped a sight source.
+
+**Deliberately unlike signal reach.** Cascades travel only through
+connected, activatable tiles and pay each tile's own `activationCost`, so
+their range depends entirely on what's in the way. Fog is a flat Manhattan
+radius that ignores terrain completely and crosses desert freely. Without
+that difference fog would just be a second reach limit measured from the
+same places — either irrelevant when generous or a duplicate of the signal
+limit when tight. Because it *does* cross desert, it shows you across
+exactly the gaps a network can't conduct through, which is where a direct
+tap is worth spending. Manhattan rather than a square radius because
+everything in this game is orthogonal-adjacency on purpose (Milestone 1);
+a square would smuggle diagonals in through the back door.
+
+**`-1` means no fog, and it's the default** — so every level that existed
+before this one behaves identically, "simple test" included, with nothing
+added to its file.
+
+**Seeding is a per-cell flag with a checkbox in the tile picker.** A fogged
+level with nothing visible has nothing tappable and can't begin, so a level
+needs at least one cell marked `startsVisible`. It's stored as a sparse
+coordinate list rather than a second full-board grid — it's usually one or
+two tiles, and a mask of mostly-blank rows would be noise to read and to
+diff. Seeds stay sources for the whole run, not just turn one: they're the
+guaranteed foothold, and a seed that stopped counting once you activated
+something could strand a run that later lost its other sources.
+
+**The invariant that keeps everything else intact: an active cell is
+always visible.** It's zero steps from itself, so it's its own sight
+source at any `fogDistance`, including 0. Fog therefore can never hide
+progress you've made, and — critically — can never block the free cull
+Milestone 6 built to guarantee a starving colony is always fixable.
+
+**Fog counts toward board exhaustion**, so a run can end because nothing
+*visible* is actionable even with board and energy to spare. That's the
+agreed behaviour, and the outcome screen already distinguishes "nothing
+left to do" from "out of energy".
+
+### What it did to "recolonized"
+
+`fogDistance: 2`, seeded on the power plant. The level now teaches its own
+ordering more honestly than the economy alone did. Previously tapping
+residential first was a *bad trade* — legal, but it stranded you. Now the
+residential row is more than 2 steps from anything the plant's network
+lights, so it simply isn't reachable until a mine (which sits between the
+farms and the houses) is up. The wrong order stopped being a subtle
+economic mistake and became "that isn't a move yet."
+
+The intended sequence is now plant → mine → resident → mine → resident →
+mine → resident, verified by simulation against the real modules and
+played through in the browser: 21/96 with energy to spare, and each newly
+activated tile revealing exactly the next one. Both degenerate orders still
+fail, now for legible reasons — all-mines-first runs dry, residential-first
+can't be tapped at all.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1033,6 +1106,11 @@ narrow phone.
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
 | `applyTap` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
 | The log shows only the most recent turn, with a reason per effect | The question a player actually has is about the tap they just made, and the effects alone were never the confusing part — the rule behind them was |
+| Fog gates what you can tap, not just what you can see | On a deterministic board a knowledge-only fog evaporates on the second attempt, leaving a memorization tax and no mechanic |
+| Cells you've seen stay drawn (dimmed) once they fall dark | Re-hiding known board taxes memory rather than skill, and would make the board lurch whenever a cull dropped a sight source |
+| Fog is flat Manhattan distance and crosses desert; signal pays per-tile cost and doesn't | Otherwise fog is just a second reach limit from the same sources; crossing desert is what makes it show you where a direct tap is worth spending |
+| `fogDistance: -1` (the default) means no fog | Every pre-fog level keeps behaving identically with nothing added to its file |
+| Seeds are a sparse `startsVisible` coordinate list, permanent for the run | A fogged level can't begin with nothing visible; a full-board mask would be mostly blank rows, and a seed that expired could strand a run |
 
 ## Open questions
 
@@ -1063,11 +1141,13 @@ narrow phone.
 - Building placement as a *gameplay* mechanic (spent from the energy budget,
   part of a run) — the level editor added authoring-time placement, which is
   a different thing: it happens outside a run and costs nothing
-- Jobs beyond mining — sensor towers (fog of war), defense against dangers —
-  and fog of war itself. Milestone 6 built the colony economy's population/
-  food/energy loop generally enough for more job types to opt in later the
-  same way mine did (a capability flag in `buildings.js`), but only mining
-  exists so far
+- Jobs beyond mining — sensor towers, defense against dangers. Milestone 6
+  built the colony economy's population/food/energy loop generally enough for
+  more job types to opt in later the same way mine did (declared resources in
+  `buildings.js`), but only mining exists so far. Fog itself landed in
+  Milestone 16, and `visibility.js` already reads a `sight` property off a
+  building to extend it locally — so a tower is one table entry whenever it's
+  wanted, but none exists yet
 - Drag-to-paint in the icon editor (Milestone 8) — each pixel takes its own
   tap; painting a stroke across several at once is a real upgrade but a
   separate feature

@@ -20,6 +20,7 @@ import {
 import { resolveColony, hasColony } from "./colony.js";
 import { resolveTap, applyTap, hasProductiveMove, activatedFraction } from "./rules.js";
 import { describeTurn } from "./log.js";
+import { visibleCells, rememberVisible } from "./visibility.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { paintTile } from "./tiles.js";
@@ -29,7 +30,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.18.0";
+const VERSION = "0.19.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -76,6 +77,10 @@ let originY = 0;
 let buttons = { reset: null, edit: null, legend: null };
 // Outcome-screen button rects, or null while a run is still in progress.
 let outcomeButtons = null;
+
+// What's currently in sight (visibility.js). Recomputed after every tap
+// rather than every frame — like boardExhausted, only a tap can change it.
+let visible = new Set();
 
 // The cell the open tile picker is editing, or null the rest of the time.
 let pickerCell = null;
@@ -157,12 +162,19 @@ function startRun(level) {
   outcome = null;
   boardExhausted = false;
   lastTurn = null;
+  refreshVisibility();
   setEditMode(false);
   resize();
 }
 
 function loadLevelByRecord(record) {
   startRun(parseLevel(record));
+}
+
+// Recomputes sight and records what it reached, so a cell that later falls
+// back into the dark still draws (dimmed) rather than vanishing.
+function refreshVisibility() {
+  visible = rememberVisible(world);
 }
 
 // Adds `record` to the in-memory level list, or replaces the entry with the
@@ -243,6 +255,12 @@ function showTilePicker(cell) {
   pickerCell = cell;
   modals.openTilePicker({
     currentType: cell.type,
+    startsVisible: cell.startsVisible,
+    onToggleStartsVisible: () => {
+      cell.startsVisible = !cell.startsVisible;
+      refreshVisibility();
+      return cell.startsVisible;
+    },
     iconOverrides,
     onSelect: (typeId) => {
       ensureLegendChar(world.level, typeId);
@@ -250,6 +268,7 @@ function showTilePicker(cell) {
       cell.active = false;
       cell.litAt = null;
       cell.drainedAt = null;
+      refreshVisibility();
       pickerCell = null;
       modals.closeModal();
     },
@@ -362,6 +381,7 @@ canvas.addEventListener("pointerdown", (event) => {
   const resolved = resolveTap(world, cell);
   if (!resolved.ok) return;
   lastTurn = applyTap(world, resolved, performance.now());
+  refreshVisibility();
 
   // A free cull can pull energy back above 0 by fixing "fed" status — if that
   // happens the run isn't over after all, so clear any outcome reached for it
@@ -389,14 +409,35 @@ function drainPulse(cell, now) {
   return Math.max(0, 1 - (now - cell.drainedAt) / LIGHT_TIME);
 }
 
+// Fog has three states, and they're three different questions. Unseen: you
+// don't know what's there. Seen but dark: you know, but can't act on it —
+// drawn dimmed, because hiding what you already discovered would tax memory
+// rather than skill. Visible: normal, and tappable. Edit mode ignores all of
+// it; you can't lay out a board you can't see.
 function drawCell(cell, now) {
   const building = buildingFor(cell);
+  const inSight = editMode || visible.has(cell);
+  if (!inSight && !cell.seen) {
+    // An unseen cell still holds its place, so the board's shape reads and
+    // the grid doesn't appear to shrink as fog moves.
+    ctx.save();
+    ctx.translate(originX + cell.x * cellSize, originY + cell.y * cellSize);
+    const pad = Math.max(1, Math.round(cellSize * 0.06));
+    ctx.fillStyle = "#161b23";
+    ctx.beginPath();
+    ctx.roundRect(pad, pad, cellSize - pad * 2, cellSize - pad * 2, Math.round(cellSize * 0.2));
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
   // A drain never activates itself, but still flashes briefly the moment it
   // fires. Everything else uses ordinary lit progress.
   const t = building.drain ? drainPulse(cell, now) : litProgress(cell, now);
 
   ctx.save();
   ctx.translate(originX + cell.x * cellSize, originY + cell.y * cellSize);
+  if (!inSight) ctx.globalAlpha = 0.34; // remembered, not currently in sight
   paintTile(ctx, cellSize, building, t, iconOverrides);
   ctx.restore();
 }

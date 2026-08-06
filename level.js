@@ -34,6 +34,7 @@ import { BUILDINGS } from "./buildings.js";
 //   integer  — must be a whole number
 //   min/max  — inclusive bounds, unless exclusiveMin says otherwise
 //   label    — how the field is described in an error message
+//   error    — the whole message, for a field the default phrasing misfits
 const LEVEL_NUMBERS = {
   energyBudget: {
     required: true, integer: true, min: 1,
@@ -53,6 +54,13 @@ const LEVEL_NUMBERS = {
   foodPerFarm: { default: 1, min: 0, label: "foodPerFarm" },
   mineYield: { default: 2, min: 0, label: "mineYield" },
   starvationPenalty: { default: 1, min: 0, label: "starvationPenalty" },
+  // How far visibility reaches from anything that provides it, in plain
+  // Manhattan steps — see visibility.js. -1 means no fog at all, which is how
+  // every level behaved before fog existed, so omitting it changes nothing.
+  fogDistance: {
+    default: -1, integer: true, min: -1, label: "fogDistance",
+    error: "Level's fogDistance must be -1 (no fog) or a whole number of tiles",
+  },
 };
 
 function parseNumbers(data) {
@@ -72,9 +80,10 @@ function parseNumbers(data) {
       (spec.max === undefined || raw <= spec.max);
     if (!ok) {
       throw new Error(
-        spec.required
+        spec.error ??
+        (spec.required
           ? `Level needs ${spec.label}`
-          : `Level's ${spec.label} must be a non-negative number`
+          : `Level's ${spec.label} must be a non-negative number`)
       );
     }
     out[key] = raw;
@@ -90,7 +99,7 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid } = data;
+  const { name, size, legend, grid, startsVisible } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -131,7 +140,28 @@ export function parseLevel(data) {
       if (!typeId) {
         throw new Error(`Unknown character '${char}' at row ${y}, column ${x}`);
       }
-      cells.push({ x, y, type: typeId });
+      cells.push({ x, y, type: typeId, startsVisible: false });
+    }
+  }
+
+  // Cells that provide visibility from the outset, as [x, y] pairs. A fogged
+  // level needs at least one or nothing is visible, so nothing is tappable,
+  // and the run can't begin — see visibility.js. A sparse coordinate list
+  // rather than a second grid: it's usually one or two tiles, and a
+  // full-board mask of mostly-blank rows would be noise to read and to diff.
+  if (startsVisible !== undefined) {
+    if (!Array.isArray(startsVisible)) {
+      throw new Error("Level's startsVisible must be an array of [x, y] pairs");
+    }
+    for (const pair of startsVisible) {
+      if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(Number.isInteger)) {
+        throw new Error("Level's startsVisible entries must be [x, y] pairs");
+      }
+      const [x, y] = pair;
+      if (x < 0 || y < 0 || x >= size.width || y >= size.height) {
+        throw new Error(`Level's startsVisible has (${x},${y}) outside the board`);
+      }
+      cells[y * size.width + x].startsVisible = true;
     }
   }
 
@@ -163,10 +193,16 @@ export function createRun(level) {
     cells: level.cells.map((cell) => ({
       x: cell.x,
       y: cell.y,
-      // Mutable: the level editor retypes cells in place on the live run.
+      // Mutable: the level editor retypes cells in place on the live run, and
+      // can toggle which ones seed visibility.
       type: cell.type,
+      startsVisible: cell.startsVisible,
       active: false,
       litAt: null,
+      // Whether this cell has ever been visible this run. Fog gates what you
+      // can *do*, but hiding what you've already seen would only tax memory —
+      // see visibility.js and the renderer.
+      seen: false,
       drainedAt: null,
     })),
   };
@@ -222,5 +258,9 @@ export function serializeLevel(world, name) {
   for (const key of Object.keys(LEVEL_NUMBERS)) record[key] = level[key];
   record.legend = level.legend;
   record.grid = grid;
+  // Only written when the level actually uses it, so an unfogged level's
+  // record stays exactly as small as it was before fog existed.
+  const seeds = world.cells.filter((cell) => cell.startsVisible).map((cell) => [cell.x, cell.y]);
+  if (seeds.length > 0) record.startsVisible = seeds;
   return record;
 }

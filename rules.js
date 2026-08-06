@@ -19,6 +19,7 @@
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { resolveColony } from "./colony.js";
 import { buildingFor } from "./buildings.js";
+import { visibleCells } from "./visibility.js";
 
 // Milliseconds between successive rings of a cascade. Lives here rather than
 // in the renderer because applyTap is what stamps the ripple, and the ripple
@@ -38,10 +39,24 @@ export const DRAIN_COST = 1;
 //   kind "activate" — the ordinary case: light a cell, and whatever its
 //                     cascade reaches beyond it
 //
-// `reason` on a failed tap is "noop" (nothing there to change) or "energy"
-// (something to change, but not enough energy to pay for it).
-export function resolveTap(world, cell) {
+// `reason` on a failed tap is "noop" (nothing there to change), "energy"
+// (something to change, but not enough energy to pay for it), or "hidden"
+// (out of sight, so not actionable at all — see visibility.js).
+//
+// `visible` is optional: pass a set computed once when asking about many
+// cells at a time (hasProductiveMove does), or leave it out and one is
+// computed for this call.
+export function resolveTap(world, cell, visible = visibleCells(world)) {
   if (!cell) return { kind: "none", ok: false, reason: "noop", energyCost: 0 };
+
+  // Fog gates what you can *do*, so this comes before anything else — an
+  // unseen tile isn't a move you can't afford, it's not a move at all. Note
+  // an active cell is always visible (it's zero steps from itself), so this
+  // can never block the free cull that rescues a starving colony.
+  if (!visible.has(cell)) {
+    return { kind: "none", ok: false, reason: "hidden", energyCost: 0, cell };
+  }
+
   const building = buildingFor(cell);
 
   // Tapping an already-active toggle building deactivates it instead of
@@ -172,8 +187,11 @@ export function tap(world, cell, now = 0) {
 // Because this asks resolveTap the same question the player's finger does, it
 // can't disagree with what tapping actually does — affordability included.
 export function hasProductiveMove(world) {
+  // One visibility pass shared across every cell, rather than recomputing it
+  // per candidate.
+  const visible = visibleCells(world);
   return world.cells.some((cell) => {
-    const resolved = resolveTap(world, cell);
+    const resolved = resolveTap(world, cell, visible);
     return resolved.ok && resolved.kind !== "cull";
   });
 }

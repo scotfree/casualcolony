@@ -305,6 +305,33 @@ body {
   color: #f87171;
 }
 
+/* "starts visible" in the tile picker — a property of the cell rather than
+   another type to pick, so it reads as a checkbox and sits above the list. */
+.option.check {
+  border-bottom: 1px solid #2a3441;
+  border-radius: 0;
+  margin-bottom: 4px;
+  padding-bottom: 14px;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 1px solid #3a4a5c;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  color: #5eead4;
+}
+
+.option.check.selected .checkbox {
+  border-color: #2dd4bf;
+}
+
 /* One effect per row: what happened, then the short reason underneath. The
    two are visually distinct because they answer different questions — the
    effect is fact, the reason is the rule it followed from. */
