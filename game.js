@@ -19,6 +19,7 @@ import {
 } from "./exchange.js";
 import { resolveColony, hasColony } from "./colony.js";
 import { resolveTap, applyTap, hasProductiveMove, activatedFraction } from "./rules.js";
+import { describeTurn } from "./log.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { paintTile } from "./tiles.js";
@@ -28,7 +29,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.17.0";
+const VERSION = "0.18.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -78,6 +79,11 @@ let outcomeButtons = null;
 
 // The cell the open tile picker is editing, or null the rest of the time.
 let pickerCell = null;
+
+// What the most recent tap did (the record applyTap returns), or null before
+// the first one. Only the last turn is kept — the log answers "what did that
+// just do", not "what have I done so far".
+let lastTurn = null;
 
 // --- Layout -----------------------------------------------------------------
 // The canvas fills its safe-area-inset stage; the board is square-celled and
@@ -150,6 +156,7 @@ function startRun(level) {
   world = createRun(level);
   outcome = null;
   boardExhausted = false;
+  lastTurn = null;
   setEditMode(false);
   resize();
 }
@@ -297,6 +304,11 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
+  if (hitsButton(buttons.log, hudX, hudY)) {
+    modals.openLog({ lines: describeTurn(world, lastTurn) });
+    return;
+  }
+
   if (hitsButton(buttons.edit, hudX, hudY)) {
     // "Restart" while editing: save over the level as currently loaded, then
     // start playing the freshly-saved version.
@@ -349,7 +361,7 @@ canvas.addEventListener("pointerdown", (event) => {
   // The whole turn, in one call each way: what would this do, then do it.
   const resolved = resolveTap(world, cell);
   if (!resolved.ok) return;
-  applyTap(world, resolved, performance.now());
+  lastTurn = applyTap(world, resolved, performance.now());
 
   // A free cull can pull energy back above 0 by fixing "fed" status — if that
   // happens the run isn't over after all, so clear any outcome reached for it

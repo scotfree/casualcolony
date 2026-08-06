@@ -82,9 +82,14 @@ export function resolveTap(world, cell) {
 }
 
 // Applies a resolved tap to the world, then resolves the colony against the
-// board it leaves behind. Returns that colony result (the caller may want to
-// show it); ignores a tap that wasn't ok, so callers can hand results through
-// without checking twice.
+// board it leaves behind. Ignores a tap that wasn't ok, so callers can hand
+// results through without checking twice.
+//
+// Returns a record of everything the turn actually did — which cells lit,
+// which got cleared, what the colony looked like either side of it, where
+// the energy went. That's what makes the turn explainable after the fact
+// (see log.js); the alternative is the UI re-deriving it by diffing the
+// board, which would be guessing at what already happened here.
 //
 // `now` only stamps presentation state — when each cell should appear to
 // light, and when a drain last flashed. Pass nothing and everything lands at
@@ -92,13 +97,21 @@ export function resolveTap(world, cell) {
 export function applyTap(world, tap, now = 0) {
   if (!tap.ok) return null;
 
+  const before = resolveColony(world);
+  const energyBefore = world.energy;
+  const lit = [];
+  const cleared = [];
+  let reactedDrains = 0;
+
   if (tap.kind === "cull") {
     tap.cell.active = false;
     tap.cell.litAt = null;
+    cleared.push(tap.cell);
   } else if (tap.kind === "drain") {
     for (const target of tap.targets) {
       target.active = false;
       target.litAt = null;
+      cleared.push(target);
     }
     world.energy -= tap.energyCost;
     tap.cell.drainedAt = now; // brief self-pulse, see the renderer
@@ -109,6 +122,7 @@ export function applyTap(world, tap, now = 0) {
     for (const { cell, depth } of tap.cascade) {
       cell.active = true;
       cell.litAt = now + depth * RIPPLE_STEP;
+      lit.push(cell);
     }
     world.energy -= tap.energyCost;
 
@@ -116,9 +130,11 @@ export function applyTap(world, tap, now = 0) {
     // it can't create a new trigger for another drain (draining only removes
     // activation), so one pass over the whole board is enough.
     for (const { sink, targets } of triggeredDrains(world)) {
+      reactedDrains++;
       for (const target of targets) {
         target.active = false;
         target.litAt = null;
+        cleared.push(target);
       }
       sink.drainedAt = now;
     }
@@ -126,7 +142,19 @@ export function applyTap(world, tap, now = 0) {
 
   const colony = resolveColony(world);
   world.energy = Math.max(0, world.energy + colony.energyDelta);
-  return colony;
+
+  return {
+    kind: tap.kind,
+    cell: tap.cell,
+    energySpent: tap.energyCost,
+    energyBefore,
+    energyAfter: world.energy,
+    lit,
+    cleared,
+    reactedDrains,
+    before,
+    colony,
+  };
 }
 
 // Convenience for tests and simulations: resolve and apply in one call.

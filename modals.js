@@ -156,6 +156,38 @@ export function openLegend({ iconOverrides }) {
   });
 }
 
+// What the last turn did, and why — see log.js for where the lines come from.
+export function openLog({ lines }) {
+  open((parent) => {
+    addTitle(parent, "last turn");
+
+    if (lines.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "modal-note";
+      empty.textContent = "Nothing yet — tap a tile, then look here to see what it did.";
+      parent.appendChild(empty);
+      return;
+    }
+
+    for (const { what, why } of lines) {
+      const row = document.createElement("div");
+      row.className = "log-row";
+
+      const effect = document.createElement("div");
+      effect.className = "log-what";
+      effect.textContent = what;
+      row.appendChild(effect);
+
+      const reason = document.createElement("div");
+      reason.className = "log-why";
+      reason.textContent = why;
+      row.appendChild(reason);
+
+      parent.appendChild(row);
+    }
+  });
+}
+
 // --- Export / import --------------------------------------------------------
 //
 // Delivery is layered by what the device can actually do, best first, with a

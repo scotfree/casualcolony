@@ -955,6 +955,42 @@ device. Clearing them hands authority back to the repo. It takes two taps
 and only appears when there's something to clear, because it discards work
 that exists nowhere else and is only correct *after* a commit has landed.
 
+## Milestone 15 — A turn that explains itself
+
+The board shows *what* changed; it has never shown why any of it followed
+from the tile you touched. Several rules are only visible in their
+consequences — propagation past the tapped tile is free, a mine with nobody
+living on the board earns nothing, a tile beside a drain can never stay lit
+— and a player can be surprised by all three with nowhere to look. A
+**log** button opens the most recent turn as a list of effects, each paired
+with the short reason it happened.
+
+**Only the last turn, deliberately.** This answers "what did that just do",
+not "what have I done so far". A scrollable history is a different feature
+with a different cost, and the question people actually have is about the
+tap they just made.
+
+**`applyTap` reports what it did rather than the UI diffing the board.** It
+now returns a turn record — which cells lit, which were cleared, how many
+drains reacted, the colony either side of it, energy before and after —
+because it is the one place that *knows*. Reconstructing that afterwards by
+comparing board states would be guesswork presented as fact, and would go
+subtly wrong exactly where the log is most useful (a cascade that lit a
+tile which a drain then took back leaves no trace in the final board).
+
+**The prose lives in `log.js`, not in the rules.** `rules.js` returns data;
+`log.js` turns it into sentences. Same split as everywhere else — the
+mechanics don't know how they're described.
+
+**Lines report only what moved.** An early version printed "Population
+0 → 0" whenever food capacity changed, which is noise wearing the costume
+of information. Each colony number is mentioned only if it actually
+changed.
+
+**Hidden in edit mode**, where there are no turns to explain — which also
+keeps the two longer edit-mode labels from crowding the level name on a
+narrow phone.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -995,6 +1031,8 @@ that exists nowhere else and is only correct *after* a commit has landed.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
+| `applyTap` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
+| The log shows only the most recent turn, with a reason per effect | The question a player actually has is about the tap they just made, and the effects alone were never the confusing part — the rule behind them was |
 
 ## Open questions
 

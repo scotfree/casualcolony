@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.14</span>
+  <span class="kicker">Field Edition · v0.18</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -591,7 +591,8 @@
   <a href="#overview"><span class="n">§1</span>Overview</a>
   <a href="#quick-start"><span class="n">§2</span>Quick Start</a>
   <a href="#mechanics"><span class="n">§3</span>Mechanics</a>
-  <a href="#next"><span class="n">§4</span>Open Questions</a>
+  <a href="#making"><span class="n">§4</span>Making Your Own</a>
+  <a href="#next"><span class="n">§5</span>Open Questions</a>
 </nav>
 
 <main>
@@ -871,6 +872,17 @@
       starving colony with no way back; a free one never can.
     </p>
 
+    <h3 class="h">When you're not sure what just happened</h3>
+    <p class="prose">
+      Tap <strong>log</strong> in the top right. It shows what your most
+      recent tap did — what it cost, how many tiles it lit, what happened to
+      population and food, where the energy went — and next to each effect,
+      the short reason it followed. It's the fastest way to see <em>why</em>
+      a mine earned nothing, or why a cascade stopped where it did, without
+      working backwards from the board. It only ever shows the last turn, so
+      check it while the surprise is fresh.
+    </p>
+
     <h3 class="h" id="ending">How a run ends</h3>
     <p class="prose">
       A run resolves the moment nothing about the board can change further —
@@ -908,8 +920,89 @@
 
   <hr class="rule" />
 
+  <section id="making">
+    <div class="eyebrow"><span class="num">§4</span> Making Your Own</div>
+    <h2 class="h">Editing levels and tiles, and keeping what you make</h2>
+    <p class="prose">
+      Everything so far has been about playing. The game also lets you
+      change the board, redraw what a building looks like, and — this is the
+      part that matters — get those changes out of the browser and into the
+      project itself, so they survive and everyone else sees them.
+    </p>
+
+    <h3 class="h">Edit mode</h3>
+    <p class="prose">
+      Tap <strong>edit</strong> in the top right. Tapping a tile now opens a
+      picker instead of playing a turn: choose any building type and that
+      cell becomes it. The two right-hand buttons change jobs while you're
+      editing — <strong>save as</strong> saves your board under a name you
+      type, and <strong>restart</strong> saves over the level as loaded and
+      drops you back into playing it. Editing only ever changes tile
+      <em>types</em>; the level's numbers (energy budget, completion goal,
+      the colony knobs in Fig. 4) are set when a level is authored and
+      aren't part of what edit mode touches.
+    </p>
+
+    <h3 class="h">Drawing a tile's icon</h3>
+    <p class="prose">
+      Every row in the tile picker has a pencil button. It opens a 10×10
+      pixel grid, pre-filled with that building's current icon, where
+      tapping a pixel flips it on or off. Saving replaces that icon
+      <em>everywhere</em> — a custom mine is a custom mine on every level,
+      because an icon belongs to the building type rather than to one cell
+      or one board.
+    </p>
+
+    <div class="callout">
+      <div class="cap">Where your edits actually live</div>
+      <p>
+        This game is static files with no server behind it, so an edit is
+        saved to your browser's local storage. That means it exists on
+        <em>that device only</em> — not on your laptop, not for anyone else
+        — and clearing your browser's site data deletes it. The export flow
+        below is how an edit stops being temporary.
+      </p>
+    </div>
+
+    <h3 class="h">Getting edits into the project</h3>
+    <p class="prose">
+      Open the <strong>level</strong> button, then
+      <strong>levels &amp; icons…</strong> at the bottom of the list. You get
+      four things:
+    </p>
+
+    <div class="panel">
+      <div class="panel-cap">Fig. 5 — Levels &amp; icons</div>
+      <table class="knobs">
+        <tr><th>Action</th><th>What it gives you</th></tr>
+        <tr><td>export levels</td><td>The complete <code>levels/levels.json</code></td></tr>
+        <tr><td>export icons</td><td>The complete <code>icons-data.js</code></td></tr>
+        <tr><td>import…</td><td>Paste either one back in</td></tr>
+        <tr><td>clear local edits</td><td>Hand control back to the shipped files</td></tr>
+      </table>
+      <div class="panel-note">Each export is a <strong>whole file</strong>, not a fragment — so you replace the file wholesale rather than merging anything by hand, and the change shows up as a clean diff.</div>
+    </div>
+
+    <ol class="steps">
+      <li><strong>Export.</strong> Pick <em>export levels</em> or <em>export icons</em>. The text appears in a box with <strong>copy</strong>, and on a phone a <strong>share</strong> button too — which is the quick way to AirDrop it to a laptop or send it to yourself. If neither works, the text is right there to select by hand.</li>
+      <li><strong>Replace the file and commit.</strong> Paste it over <code>levels/levels.json</code> or <code>icons-data.js</code> in the repo. Once that's pushed, your level or icon ships with the game for everyone.</li>
+      <li><strong>Clear local edits.</strong> Come back and tap it (twice — it asks for confirmation). Until you do, your local copies keep shadowing the identical shipped ones, which quietly means later changes to the project file get ignored on your device.</li>
+    </ol>
+
+    <p class="prose">
+      <strong>Import</strong> is the same trip backwards: one paste box that
+      works out on its own whether you handed it levels or icons. It's how
+      you move work between a phone and a laptop, and how you get everything
+      back if a browser ever wipes its storage. Bad input is rejected with a
+      reason rather than half-loaded — a level that wouldn't actually play
+      never makes it in.
+    </p>
+  </section>
+
+  <hr class="rule" />
+
   <section id="next">
-    <div class="eyebrow"><span class="num">§4</span> Open Questions</div>
+    <div class="eyebrow"><span class="num">§5</span> Open Questions</div>
     <h2 class="h">What's undecided, and what's not built yet</h2>
     <p class="prose">
       Casual Colony is a small game that grows one system at a time. Some of
@@ -957,7 +1050,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.14.0
+  Casual Colony — Player's Manual · built for v0.18.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">

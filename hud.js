@@ -42,12 +42,17 @@ export function hudLayout(ctx, width, editMode, name = "") {
     h: HUD_HEIGHT,
   };
 
-  // The two that change what you're playing, laid out right to left.
-  let right = width - 14;
-  for (const [key, label, padding] of [
+  // Laid out right to left. `log` explains the turn you just took, so it's
+  // hidden while editing — there are no turns in there to explain, and
+  // dropping it keeps the two edit-mode labels from crowding the name.
+  const rightButtons = [
     ["reset", editMode ? "save as" : "level", 26],
     ["edit", editMode ? "restart" : "edit", 24],
-  ]) {
+  ];
+  if (!editMode) rightButtons.push(["log", "log", 24]);
+
+  let right = width - 14;
+  for (const [key, label, padding] of rightButtons) {
     const textWidth = ctx.measureText(label).width;
     rects[key] = {
       label,
@@ -91,10 +96,12 @@ export function drawHud(ctx, width, view, layout) {
 
   for (const [key, color] of [
     ["legend", BUTTON],
+    ["log", BUTTON],
     ["reset", BUTTON],
     ["edit", view.editMode ? GOOD : BUTTON],
   ]) {
     const button = layout[key];
+    if (!button) continue; // log is absent while editing
     ctx.textAlign = button.align;
     ctx.fillStyle = color;
     ctx.fillText(button.label, button.textAt, row1);

@@ -304,3 +304,26 @@ body {
 .option.danger {
   color: #f87171;
 }
+
+/* One effect per row: what happened, then the short reason underneath. The
+   two are visually distinct because they answer different questions — the
+   effect is fact, the reason is the rule it followed from. */
+.log-row {
+  padding: 8px 2px;
+  border-bottom: 1px solid #232b37;
+}
+
+.log-row:last-child {
+  border-bottom: none;
+}
+
+.log-what {
+  color: #c7d3de;
+  font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.log-why {
+  color: #7e93a6;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 3px;
+}

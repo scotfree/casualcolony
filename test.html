@@ -24,6 +24,7 @@ import { parseLevel, createRun, loadLevelSet, serializeLevel } from "./level.js"
 import { computeCascade, triggeredDrains } from "./cascade.js";
 import { resolveColony, hasColony } from "./colony.js";
 import { resolveTap, applyTap, tap, hasProductiveMove, activatedFraction } from "./rules.js";
+import { describeTurn } from "./log.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
 import { loadSavedLevels, saveLevel } from "./storage.js";
@@ -480,6 +481,107 @@ test("foodPerFarm scales how much one farm feeds", () => {
 test("hasColony only reports boards that actually use the colony economy", () => {
   assertEqual(hasColony(build(["CCP"])), false, "a crystal-only level has no colony");
   assertEqual(hasColony(build(["C.M"])), true, "one mine is enough");
+});
+
+// --- Turn log (log.js) -------------------------------------------------------
+//
+// Each line pairs an effect with the rule it followed from. These assert the
+// *reasons*, not just the numbers — a log that explained a turn wrongly would
+// be worse than no log.
+
+// Convenience: play one tap and describe it.
+function describeTap(world, x, y) {
+  const resolved = resolveTap(world, cellAt(world, x, y));
+  const turn = applyTap(world, resolved);
+  return describeTurn(world, turn);
+}
+
+function joined(lines) {
+  return lines.map((l) => `${l.what} :: ${l.why}`).join("\n");
+}
+
+test("describeTurn says nothing before the first turn", () => {
+  assertEqual(describeTurn(build(["C"]), null), [], "no turn, no lines");
+});
+
+test("the log reports the tapped tile and what it cost", () => {
+  const world = build(["M"], { energyBudget: 9 });
+  const text = joined(describeTap(world, 0, 0));
+  assert(text.includes("Tapped Mine at (0,0)"), "names the tile and where");
+  assert(text.includes("spent 3"), "and its real cost, not a flat 1");
+  assert(text.includes("own activation cost"), "with the reason");
+});
+
+test("the log explains why a bare tap lit only one tile", () => {
+  const world = build(["CC"]);
+  const text = joined(describeTap(world, 0, 0));
+  assert(text.includes("Lit 1 tile"), "one tile");
+  assert(text.includes("nothing left over"), "explains the cost cancelling out");
+});
+
+test("the log credits the power plant's boost when a cascade travels", () => {
+  const world = build(["PCCC"]);
+  const lines = describeTap(world, 0, 0);
+  const text = joined(lines);
+  assert(text.includes("Lit 4 tiles"), `expected 4 lit, got: ${text}`);
+  assert(text.includes("adds 5 signal"), "names the boost that paid for it");
+});
+
+test("the log explains a drain taking a tile straight back", () => {
+  const world = build(["CD"]);
+  const text = joined(describeTap(world, 0, 0));
+  assert(text.includes("drain"), "mentions the drain");
+  assert(text.includes("can never stay lit"), "explains why the tile went dark again");
+});
+
+test("the log explains mines earning nothing with nobody living there", () => {
+  const world = build(["FM"], { energyBudget: 20 });
+  tap(world, cellAt(world, 0, 0));            // farm: food, but no residents
+  const text = joined(describeTap(world, 1, 0)); // the mine
+  assert(text.includes("No income"), `expected a no-income line, got: ${text}`);
+  assert(text.includes("needs a resident"), "and the actual reason");
+});
+
+test("the log reports mining income once someone lives there", () => {
+  const world = build(["HFM"], { energyBudget: 20, mineYield: 2 });
+  tap(world, cellAt(world, 1, 0)); // farm
+  tap(world, cellAt(world, 0, 0)); // residential
+  const text = joined(describeTap(world, 2, 0)); // mine
+  assert(text.includes("+2 ⚡ income"), `expected income, got: ${text}`);
+  assert(text.includes("colony fed (1/1)"), "shows the fed ratio behind it");
+});
+
+test("the log reports starvation and points at the fix", () => {
+  const world = build(["HH"], { energyBudget: 20, starvationPenalty: 1 });
+  tap(world, cellAt(world, 0, 0));
+  const text = joined(describeTap(world, 1, 0));
+  assert(text.includes("starvation"), `expected starvation, got: ${text}`);
+  assert(text.includes("culling a residential"), "tells the player how to stop it");
+});
+
+test("the log reports only the colony numbers that actually moved", () => {
+  // A farm changes food capacity but not population; saying "population
+  // 0 -> 0" alongside it would be noise, not information.
+  const world = build(["F"], { energyBudget: 20 });
+  const text = joined(describeTap(world, 0, 0));
+  assert(text.includes("Food capacity 0 → 1"), `expected the food change, got: ${text}`);
+  assert(!text.includes("Population"), "and no population line, since it didn't move");
+});
+
+test("the log reports a cull as free, and the population drop", () => {
+  const world = build(["H"], { energyBudget: 20 });
+  tap(world, cellAt(world, 0, 0));
+  const text = joined(describeTap(world, 0, 0)); // second tap = cull
+  assert(text.includes("Culled"), "names the cull");
+  assert(text.includes("free"), "says it's free");
+  assert(text.includes("Population 1 → 0"), `expected the drop, got: ${text}`);
+});
+
+test("the log always ends with where the energy went", () => {
+  const world = build(["M"], { energyBudget: 9 });
+  const lines = describeTap(world, 0, 0);
+  const last = lines[lines.length - 1];
+  assertEqual(last.what, "Energy 9 → 6", "start and end, after cost and income");
 });
 
 // --- Export / import (exchange.js) -------------------------------------------
