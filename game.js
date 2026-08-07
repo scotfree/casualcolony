@@ -30,7 +30,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.19.0";
+const VERSION = "0.20.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap

@@ -121,6 +121,75 @@ The general shape: conductors spread, power sustains, housing and farms gate
 each other, infrastructure fixes topology problems. Most types should both give
 something and demand something.
 
+## Tile economy reference
+
+The concrete version of the taxonomy above: every number that characterises a
+tile, independent of any particular level or of fog. Values come from
+`buildings.js`; anything named in `code font` is a level knob (`level.js`'s
+`LEVEL_NUMBERS`) shown here at its default, so a level can tune it.
+
+| Tile | Energy to activate | Signal to reach | Energy, one-off | Energy, per turn | Workers required | Population supplied | Food required | Food supplied | Propagates |
+|---|---|---|---|---|---|---|---|---|---|
+| **Desert** | — | — | — | — | — | — | — | — | no (inert) |
+| **Crystal** | 1 | 1 | — | — | — | — | — | — | all 4 directions |
+| **Red Crystal** | 1 | 1 | — | — | — | — | — | — | north/south only |
+| **Green Crystal** | 1 | 1 | — | — | — | — | — | — | east/west only |
+| **Power Plant** | 1 | 1 | — | — | — | — | — | — | all 4, and adds `powerPlantBoost` = **5** signal |
+| **Residential** | 2 | 2 | — | — | — | **+1** | 1 | — | all 4 |
+| **Farm** | 2 | 2 | — | — | — | — | — | **+`foodPerFarm`** = 1 | all 4 |
+| **Mine** | 3 | 3 | — | **+`mineYield`** = 2 | *see below* | — | — | — | all 4 |
+| **Drain** | 1 flat | — | — | — | — | — | — | — | no (inert) |
+
+**Energy to activate and signal to reach are the same number** — one
+`activationCost` doing two jobs. Tap a tile directly and you pay it out of the
+energy pool; reach it through a cascade and the network's signal pays it
+instead, which is why everything past the tapped tile is free. Drain is the
+exception: it never activates, so it has no `activationCost` and can't be a
+cascade target at all — it just costs a flat 1 when it actually clears
+something, and nothing when it wouldn't.
+
+**Boost is signal, not energy.** A power plant's +5 extends how far a cascade
+travels; it never adds to the energy pool. Nothing in the game currently
+converts activation into a one-off energy payment — that column is empty on
+purpose, and it's an open extension point (a building could simply declare a
+one-off flow).
+
+**"Workers required" is empty for a reason, and it's a known gap.** The mine
+carries `requiresLabor`, but that's a *colony-wide threshold*, not a per-tile
+requirement: it checks that population ≥ 1 and the colony is fed, and then
+every mine pays out in full. One resident staffs any number of mines. So
+labour is currently a switch, not a scarce resource, and nothing competes for
+it. Making it real means declaring consumption (`needs: { workers: 1 }`)
+alongside the existing `stocks`/`flows` — the resource model from Milestone 12
+already has the right shape for it; nothing uses it yet.
+
+**Food is a threshold, not a stock that drains.** Each residential counts 1
+population; each farm supplies `foodPerFarm` capacity. Nothing is consumed
+turn to turn — the colony is simply *fed* while population ≤ capacity. Go over
+and every mine stops paying and the colony bleeds `starvationPenalty` = 1
+energy per person over the line, per turn, until you cull someone.
+
+**A mine is net-negative on the turn you tap it** and repays over the turns
+that follow: −3 once, then +2 each turn it's staffed and fed. Break-even is
+two subsequent turns, profit after that — so a mine's worth depends on how
+many turns come after it, and one bought near the end of a short level never
+earns out.
+
+### Level knobs, and their defaults
+
+| Knob | Default | What it scales |
+|---|---|---|
+| `energyBudget` | *(required)* | Starting energy |
+| `completionGoal` | *(required)* | Fraction of **all** cells needed to win |
+| `powerPlantBoost` | 5 | Signal a power plant adds |
+| `foodPerFarm` | 1 | Food capacity per active farm |
+| `mineYield` | 2 | Energy per active, staffed mine, per turn |
+| `starvationPenalty` | 1 | Energy lost per person over capacity, per turn |
+| `fogDistance` | −1 | Sight radius; −1 means no fog |
+
+Activation cost is deliberately *not* a level knob — it's a property of what a
+tile is, the same as its colour. See the decisions table.
+
 ## Milestone 1 — Crystals and Desert
 
 Deliberately minimal: the smallest thing that produces a real cascade, so we

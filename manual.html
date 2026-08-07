@@ -581,7 +581,7 @@
 </svg>
 
 <header class="masthead">
-  <span class="kicker">Field Edition · v0.19</span>
+  <span class="kicker">Field Edition · v0.20</span>
   <h1 class="title">Casual<span class="gem-dot">+</span>Colony</h1>
   <p class="tagline">Player's Manual</p>
   <p class="tagline"><a href="./index.html">&larr; back to the game</a></p>
@@ -944,7 +944,45 @@
         <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
         <tr><td>fogDistance</td><td class="val">2</td><td>How far you can see from anything lit (−1 = no fog)</td></tr>
       </table>
-      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere, and it's what a direct tap spends from your energy pool too: <strong>1</strong> for crystal (any color) and the power plant, <strong>2</strong> for residential and farm, <strong>3</strong> for a mine.</div>
+      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere, and it's what a direct tap spends from your energy pool too. See Fig. 5.</div>
+    </div>
+
+    <h3 class="h">Every tile, by the numbers</h3>
+    <p class="prose">
+      The whole economy on one page, independent of any particular level.
+      Values in <em>italics</em> are level knobs shown at their usual
+      setting — a level can tune those; the rest are fixed properties of the
+      building type wherever it appears.
+    </p>
+
+    <div class="panel">
+      <div class="panel-cap">Fig. 5 — Tile economy</div>
+      <div class="scroller">
+        <table class="knobs">
+          <tr>
+            <th>Tile</th><th>Energy<br />to tap</th><th>Energy<br />per turn</th>
+            <th>People</th><th>Food<br />needed</th><th>Food<br />grown</th><th>Spreads</th>
+          </tr>
+          <tr><td>Desert</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>never</td></tr>
+          <tr><td>Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Red Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>north/south</td></tr>
+          <tr><td>Green Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>east/west</td></tr>
+          <tr><td>Power Plant</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4, <em>+5 signal</em></td></tr>
+          <tr><td>Residential</td><td class="val">2</td><td class="val">—</td><td class="val">+1</td><td class="val">1</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Farm</td><td class="val">2</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val"><em>+1</em></td><td>all 4 ways</td></tr>
+          <tr><td>Mine</td><td class="val">3</td><td class="val"><em>+2</em></td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Drain</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>never</td></tr>
+        </table>
+      </div>
+      <div class="panel-note">
+        <strong>Energy to tap</strong> is also the signal it takes to reach that tile through a cascade — one number, two jobs. Tap it yourself and your energy pays; reach it through a network and the signal pays, which is why everything past the tile you touched is free. A <strong>drain</strong> is the exception: it never activates, so a cascade can't reach it at all, and its flat 1 is only charged when it actually clears something.
+      </div>
+      <div class="panel-note">
+        A <strong>mine</strong> loses you energy on the turn you tap it — 3 out, 2 back — and only turns a profit over the turns that follow. One bought late in a short level never earns out. A mine also needs the colony fed with at least one resident living somewhere on the board; it doesn't need a worker each.
+      </div>
+      <div class="panel-note">
+        Food isn't spent, it's a ceiling: you're fed while people ≤ food. Cross the line and every mine stops paying while you bleed <em>1</em> energy per person over it, every turn, until you cull someone.
+      </div>
     </div>
   </section>
 
@@ -1011,7 +1049,7 @@
     </p>
 
     <div class="panel">
-      <div class="panel-cap">Fig. 5 — Levels &amp; icons</div>
+      <div class="panel-cap">Fig. 6 — Levels &amp; icons</div>
       <table class="knobs">
         <tr><th>Action</th><th>What it gives you</th></tr>
         <tr><td>export levels</td><td>The complete <code>levels/levels.json</code></td></tr>
@@ -1089,7 +1127,7 @@
 </main>
 
 <footer>
-  Casual Colony — Player's Manual · built for v0.19.0
+  Casual Colony — Player's Manual · built for v0.20.0
 </footer>
 
 <button type="button" class="legend-btn" id="legend-open" aria-haspopup="dialog" aria-controls="legend-dialog">
