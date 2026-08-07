@@ -123,72 +123,53 @@ something and demand something.
 
 ## Tile economy reference
 
-The concrete version of the taxonomy above: every number that characterises a
-tile, independent of any particular level or of fog. Values come from
-`buildings.js`; anything named in `code font` is a level knob (`level.js`'s
-`LEVEL_NUMBERS`) shown here at its default, so a level can tune it.
+One currency: energy. Every tile has a cost, maybe generation, maybe storage.
+Values from `buildings.js`; `foodPerFarm` and `starvationPenalty` are level
+knobs shown at their defaults.
 
-| Tile | Energy to activate | Signal to reach | Energy, one-off | Energy, per turn | Workers required | Population supplied | Food required | Food supplied | Propagates |
-|---|---|---|---|---|---|---|---|---|---|
-| **Desert** | — | — | — | — | — | — | — | — | no (inert) |
-| **Crystal** | 1 | 1 | — | — | — | — | — | — | all 4 directions |
-| **Red Crystal** | 1 | 1 | — | — | — | — | — | — | north/south only |
-| **Green Crystal** | 1 | 1 | — | — | — | — | — | — | east/west only |
-| **Power Plant** | 1 | 1 | — | — | — | — | — | — | all 4, and adds `powerPlantBoost` = **5** signal |
-| **Residential** | 2 | 2 | — | — | — | **+1** | 1 | — | all 4 |
-| **Farm** | 2 | 2 | — | — | — | — | — | **+`foodPerFarm`** = 1 | all 4 |
-| **Mine** | 3 | 3 | — | **+`mineYield`** = 2 | *see below* | — | — | — | all 4 |
-| **Drain** | 1 flat | — | — | — | — | — | — | — | no (inert) |
+| Tile | Cost/turn | Generation | Output | Storage | Conducts | Colony |
+|---|---|---|---|---|---|---|
+| **Desert** | — | — | — | — | never | — |
+| **Crystal** | 1 | — | — | — | all 4 | — |
+| **Red Crystal** | 1 | — | — | — | north/south | — |
+| **Green Crystal** | 1 | — | — | — | east/west | — |
+| **Power Plant** | 1 | 5 | grid | 1 | all 4 | — |
+| **Residential** | 2 | — | — | — | all 4 | population +1 |
+| **Farm** | 2 | — | — | — | all 4 | food +`foodPerFarm` (1) |
+| **Mine** | 3 | 2 | **pool** | — | all 4 | needs fed colony, population ≥ 1 |
+| **Drain** | 4 | — | — | — | all 4 | — |
 
-**Energy to activate and signal to reach are the same number** — one
-`activationCost` doing two jobs. Tap a tile directly and you pay it out of the
-energy pool; reach it through a cascade and the network's signal pays it
-instead, which is why everything past the tapped tile is free. Drain is the
-exception: it never activates, so it has no `activationCost` and can't be a
-cascade target at all — it just costs a flat 1 when it actually clears
-something, and nothing when it wouldn't.
+**Cost is per turn, while powered** — not a one-off price. That's the whole
+source of pressure: a grid you can't afford drains your pool every turn until
+it goes dark.
 
-**Boost is signal, not energy.** A power plant's +5 extends how far a cascade
-travels; it never adds to the energy pool. Nothing in the game currently
-converts activation into a one-off energy payment — that column is empty on
-purpose, and it's an open extension point (a building could simply declare a
-one-off flow).
+**Storage is what makes a generator an engine.** Energy can't pay for the turn
+that produces it, so a generator needs enough banked to cover its own cost or
+it fires once and stops. A plant has `storage: 1` against `cost: 1`, so it
+restarts itself forever. `generation: 10, storage: 0` would be a one-shot
+flare — the same two fields express both, with no type flag. Buildings that
+export to the **pool** (mines) never need it: from their grid's point of view
+they're just load, and their output goes elsewhere.
 
-**"Workers required" is empty for a reason, and it's a known gap.** The mine
-carries `requiresLabor`, but that's a *colony-wide threshold*, not a per-tile
-requirement: it checks that population ≥ 1 and the colony is fed, and then
-every mine pays out in full. One resident staffs any number of mines. So
-labour is currently a switch, not a scarce resource, and nothing competes for
-it. Making it real means declaring consumption (`needs: { workers: 1 }`)
-alongside the existing `stocks`/`flows` — the resource model from Milestone 12
-already has the right shape for it; nothing uses it yet.
+**Generation into the pool doesn't count toward its own grid's budget.** A
+mine costing 3 has to be carried by the grid's other generation; its 2 goes to
+your reserve. That's also what keeps the solve non-circular — power.js never
+needs to know anything about the colony.
 
-**Food is a threshold, not a stock that drains.** Each residential counts 1
-population; each farm supplies `foodPerFarm` capacity. Nothing is consumed
-turn to turn — the colony is simply *fed* while population ≤ capacity. Go over
-and every mine stops paying and the colony bleeds `starvationPenalty` = 1
-energy per person over the line, per turn, until you cull someone.
-
-**A mine is net-negative on the turn you tap it** and repays over the turns
-that follow: −3 once, then +2 each turn it's staffed and fed. Break-even is
-two subsequent turns, profit after that — so a mine's worth depends on how
-many turns come after it, and one bought near the end of a short level never
-earns out.
-
-### Level knobs, and their defaults
+### Level knobs
 
 | Knob | Default | What it scales |
 |---|---|---|
-| `energyBudget` | *(required)* | Starting energy |
-| `completionGoal` | *(required)* | Fraction of **all** cells needed to win |
-| `powerPlantBoost` | 5 | Signal a power plant adds |
-| `foodPerFarm` | 1 | Food capacity per active farm |
-| `mineYield` | 2 | Energy per active, staffed mine, per turn |
-| `starvationPenalty` | 1 | Energy lost per person over capacity, per turn |
+| `energyBudget` | *(required)* | Starting pool; 0 is legal |
+| `goal` | `{kind:"powered", value:…}` | `powered` (a snapshot) or `revealed` (monotonic) |
+| `foodPerFarm` | 1 | Food capacity per powered farm |
+| `starvationPenalty` | 1 | Pool lost per person over capacity, per turn |
 | `fogDistance` | −1 | Sight radius; −1 means no fog |
+| `startsVisible` | — | Cells that seed sight |
+| `startsEnabled` | — | Cells already switched on at turn one |
 
-Activation cost is deliberately *not* a level knob — it's a property of what a
-tile is, the same as its colour. See the decisions table.
+Cost and generation are deliberately *not* level knobs — they're properties of
+what a tile is, and having them in two places was half the old confusion.
 
 ## Milestone 1 — Crystals and Desert
 
@@ -1133,6 +1114,69 @@ activated tile revealing exactly the next one. Both degenerate orders still
 fail, now for legible reasons — all-mines-first runs dry, residential-first
 can't be tapped at all.
 
+## Milestone 17 — Per-turn power, grid budgets, one currency
+
+The biggest change since the game started, and it replaces the mechanic the
+game was originally built around.
+
+**Signal is gone; there is only energy.** A tile has a `cost` it draws every
+turn while powered, and maybe `generation`. The old model had two quantities
+with the same name — a pool you spent on taps, and an ephemeral "signal" that
+decayed as a cascade travelled — which was a comprehension tax we kept paying
+in explanations and never got anything back for.
+
+**Power is solved per component, per turn, not accumulated.** Everything wired
+together shares one budget: a grid runs if its generation covers its cost, and
+the shortfall comes out of the pool. Reach stopped depending on distance and
+started depending on *what you've connected* — which is what makes sequencing
+follow from topology rather than from bolted-on economics. Wire is tiles and
+tiles cost, so distance still costs; it just isn't a separate rule any more.
+
+**Brownout is all-or-nothing per component**, which is forced rather than
+chosen: partial power would mean the engine picking which tiles to drop, and it
+also makes the maths well-defined (generation comes from powered tiles, so
+"which subset runs" would be circular).
+
+**Two states, not one.** `enabled` is the player's switch and persists;
+`powered` is derived every turn. An enabled-but-dark tile is drawn with a
+dashed outline — it's the feedback that says *you* over-committed, and it comes
+back on its own the moment you cut load or add generation.
+
+**Storage is what keeps a generator running.** This was the hole: energy can't
+pay for the turn that produces it, so without something carried across the
+boundary a plant would need re-clicking every turn. A plant banks enough to
+cover its own cost and restarts itself forever. The same field would express a
+one-shot flare (`generation: 10, storage: 0`), and batteries that buffer for
+*other* tiles are a later feature.
+
+**Everything is toggleable now.** Residential's "free cull" was a special case;
+under per-turn power, switching things off is the general way you fix a grid
+you can't afford, so it isn't a per-type flag.
+
+**Drains and reactive draining are gone.** A drain is now just an expensive
+tile that gives nothing back — it still costs you, as upkeep rather than as a
+mechanic that reached out and switched neighbours off. `triggeredDrains` and
+its whole special case went with it.
+
+**Goals became typed.** `powered` is a snapshot of what's running; `revealed`
+is monotonic. `powered` is the systems-shaped one and what both shipped levels
+use; `revealed` exists but rewards touring, so it's a secondary tool.
+
+**What I got wrong along the way, on the record:** I claimed axis-restricted
+crystals would let a red bus and a green bus *cross* without joining. They
+don't — one tile has one axis, so a green row lying across a red run breaks
+it. What they actually buy is **parallel runs flush against each other without
+merging** (a 2×2 block of red is two independent columns where plain crystal
+would be one blob), which is still the dense-packing win but a different claim.
+A true crossover needs a tile carrying both axes as separate channels.
+
+**Levels.** Down to `recolonized` and `Basic`, both adapted rather than tuned.
+The test suite stopped asserting mechanics against a shipped level's exact
+layout — that coupling is what broke five tests the last time levels were
+imported, and it was the level-tuning trap encoded in the suite. Mechanics are
+tested on synthetic fixtures; levels are only checked to parse, offer a legal
+opening, and respond to play.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1173,7 +1217,11 @@ can't be tapped at all.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
-| `applyTap` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
+| Power is solved per connected component, per turn | Makes topology the thing that matters instead of distance, and lets generation be conserved rather than duplicated at every branch |
+| Brownout is all-or-nothing per component | Partial power would mean the engine choosing which tiles to drop, and would make the solve circular |
+| Generators need `storage` >= their cost to restart themselves | Energy can't pay for the turn that produces it; without a bank a generator would need re-clicking every turn |
+| Pool-output generation is excluded from its own grid's budget | Keeps the power solve independent of the colony, so there's no circular dependency between them |
+| `applyTurn` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
 | The log shows only the most recent turn, with a reason per effect | The question a player actually has is about the tap they just made, and the effects alone were never the confusing part — the rule behind them was |
 | Fog gates what you can tap, not just what you can see | On a deterministic board a knowledge-only fog evaporates on the second attempt, leaving a memorization tax and no mechanic |
 | Cells you've seen stay drawn (dimmed) once they fall dark | Re-hiding known board taxes memory rather than skill, and would make the board lurch whenever a cull dropped a sight source |

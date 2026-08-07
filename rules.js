@@ -1,204 +1,166 @@
-// What a tap does. The game's actual rules, in one place.
+// What a click does, and what a turn does. The game's actual rules.
 //
-// This used to live inside game.js's pointerdown handler, which meant the
-// rule existed three times: once for real, once hand-copied into the test
-// suite, and once more inside "is there anything left worth tapping". They
-// drifted, and every balance change had to be made in all three. Now there's
-// one rule, and the DOM handler, the tests and the board-exhaustion check are
-// all just callers.
+// A click **toggles a tile on or off** — that's the whole of the player's
+// vocabulary. It's free in itself; you pay for what you *run*, every turn,
+// which is what makes switching something off the way you fix an
+// over-committed grid. (Residential's old "free cull" was a special case of
+// this before everything became toggleable.)
 //
-// resolveTap is *pure* — it answers "what would tapping here do" without
-// doing it, which is what makes the other two callers possible. applyTap is
-// the only thing that mutates, and the split is what a future undo would be
-// built on: a resolved tap already describes exactly what it's about to
-// change.
+// A turn happens whenever a click actually changes the board. Solving it is:
 //
-// Presentation stays out of both. applyTap takes a `now` purely to stamp when
-// cells should *appear* to light; the rules themselves never read a clock.
+//   1. work out which components can run (power.js)
+//   2. take their shortfall out of the pool
+//   3. resolve the colony against whatever came out powered
+//   4. add what the powered mines pay back, take off any starvation
+//
+// resolveTap is pure — it answers "what would this click do" without doing
+// it — which is what lets the same rule serve the input handler, the tests
+// and the outcome check. applyTurn is the only thing that mutates.
 
-import { computeCascade, triggeredDrains } from "./cascade.js";
-import { resolveColony } from "./colony.js";
-import { buildingFor } from "./buildings.js";
+import { solvePower } from "./power.js";
+import { resolveColony, poolIncome, starvationCost } from "./colony.js";
+import { buildingFor, generationOf } from "./buildings.js";
 import { visibleCells } from "./visibility.js";
 
-// Milliseconds between successive rings of a cascade. Lives here rather than
-// in the renderer because applyTap is what stamps the ripple, and the ripple
-// falls out of BFS depth, which is a rules-side concept.
+// Milliseconds between successive rings of the pulse. Lives here because
+// applyTurn is what stamps it, and it falls out of distance from a generator,
+// which is a rules-side idea.
 export const RIPPLE_STEP = 70;
 
-// Draining isn't part of the activation network — a drain never lights up, it
-// only ever clears neighbours — so there's no "its own activation cost" to
-// charge. It keeps a flat price of its own.
-export const DRAIN_COST = 1;
-
-// What tapping `cell` would do, without doing it. Always returns a result
-// object; `ok` says whether the tap would actually change anything.
-//
-//   kind "cull"     — a toggle building (residential) switching back off
-//   kind "drain"    — a drain clearing its activated neighbours
-//   kind "activate" — the ordinary case: light a cell, and whatever its
-//                     cascade reaches beyond it
-//
-// `reason` on a failed tap is "noop" (nothing there to change), "energy"
-// (something to change, but not enough energy to pay for it), or "hidden"
-// (out of sight, so not actionable at all — see visibility.js).
-//
-// `visible` is optional: pass a set computed once when asking about many
-// cells at a time (hasProductiveMove does), or leave it out and one is
-// computed for this call.
+// What clicking `cell` would do, without doing it. `ok` says whether it would
+// change anything; `reason` on a failure is "inert" (nothing to switch),
+// "hidden" (out of sight — see visibility.js) or "noop".
 export function resolveTap(world, cell, visible = visibleCells(world)) {
-  if (!cell) return { kind: "none", ok: false, reason: "noop", energyCost: 0 };
+  if (!cell) return { kind: "none", ok: false, reason: "noop" };
 
-  // Fog gates what you can *do*, so this comes before anything else — an
-  // unseen tile isn't a move you can't afford, it's not a move at all. Note
-  // an active cell is always visible (it's zero steps from itself), so this
-  // can never block the free cull that rescues a starving colony.
-  if (!visible.has(cell)) {
-    return { kind: "none", ok: false, reason: "hidden", energyCost: 0, cell };
-  }
+  // Fog gates what you can *do*. An enabled cell is always visible (it's zero
+  // steps from itself), so this can never trap you into being unable to switch
+  // off the thing that's draining you.
+  if (!visible.has(cell)) return { kind: "none", ok: false, reason: "hidden", cell };
 
   const building = buildingFor(cell);
+  if (!building.conducts) return { kind: "none", ok: false, reason: "inert", cell };
 
-  // Tapping an already-active toggle building deactivates it instead of
-  // no-opping — the player's tool for fixing a starving colony. Free, and
-  // allowed even at 0 energy: the whole point is to recover from starvation,
-  // and a cull that itself cost energy (or was blocked by the very shortage
-  // it fixes) couldn't always do that.
-  if (cell.active && building.toggle) {
-    return { kind: "cull", ok: true, energyCost: 0, cell };
-  }
-
-  if (building.drain) {
-    const targets = building.drain(world, cell);
-    if (targets.length === 0) {
-      return { kind: "drain", ok: false, reason: "noop", energyCost: 0, cell };
-    }
-    if (world.energy < DRAIN_COST) {
-      return { kind: "drain", ok: false, reason: "energy", energyCost: DRAIN_COST, cell };
-    }
-    return { kind: "drain", ok: true, energyCost: DRAIN_COST, cell, targets };
-  }
-
-  const cascade = computeCascade(world, cell);
-  if (cascade.length === 0) {
-    return { kind: "activate", ok: false, reason: "noop", energyCost: 0, cell };
-  }
-
-  // A direct tap "jump starts" a tile by paying its own activationCost out of
-  // the energy pool — the alternative to reaching it for free through an
-  // already-powered network (see cascade.js). Can't afford it, can't tap it.
-  // Everything past the tapped cell is free, paid for by the network's own
-  // signal rather than the pool.
-  const energyCost = building.activationCost ?? 1;
-  if (world.energy < energyCost) {
-    return { kind: "activate", ok: false, reason: "energy", energyCost, cell };
-  }
-  return { kind: "activate", ok: true, energyCost, cell, cascade };
+  return cell.enabled
+    ? { kind: "disable", ok: true, cell }
+    : { kind: "enable", ok: true, cell };
 }
 
-// Applies a resolved tap to the world, then resolves the colony against the
-// board it leaves behind. Ignores a tap that wasn't ok, so callers can hand
-// results through without checking twice.
-//
-// Returns a record of everything the turn actually did — which cells lit,
-// which got cleared, what the colony looked like either side of it, where
-// the energy went. That's what makes the turn explainable after the fact
-// (see log.js); the alternative is the UI re-deriving it by diffing the
-// board, which would be guessing at what already happened here.
-//
-// `now` only stamps presentation state — when each cell should appear to
-// light, and when a drain last flashed. Pass nothing and everything lands at
-// once, which is exactly what a test or a simulation wants.
-export function applyTap(world, tap, now = 0) {
-  if (!tap.ok) return null;
-
-  const before = resolveColony(world);
-  const energyBefore = world.energy;
-  const lit = [];
-  const cleared = [];
-  let reactedDrains = 0;
-
-  if (tap.kind === "cull") {
-    tap.cell.active = false;
-    tap.cell.litAt = null;
-    cleared.push(tap.cell);
-  } else if (tap.kind === "drain") {
-    for (const target of tap.targets) {
-      target.active = false;
-      target.litAt = null;
-      cleared.push(target);
-    }
-    world.energy -= tap.energyCost;
-    tap.cell.drainedAt = now; // brief self-pulse, see the renderer
-  } else {
-    // Schedule the whole chain up front: each cell lights when the clock
-    // reaches its litAt. No timers to manage, and the ripple falls out of
-    // BFS depth.
-    for (const { cell, depth } of tap.cascade) {
-      cell.active = true;
-      cell.litAt = now + depth * RIPPLE_STEP;
-      lit.push(cell);
-    }
-    world.energy -= tap.energyCost;
-
-    // Any drain adjacent to a cell this cascade just lit reacts immediately —
-    // it can't create a new trigger for another drain (draining only removes
-    // activation), so one pass over the whole board is enough.
-    for (const { sink, targets } of triggeredDrains(world)) {
-      reactedDrains++;
-      for (const target of targets) {
-        target.active = false;
-        target.litAt = null;
-        cleared.push(target);
-      }
-      sink.drainedAt = now;
+// How far each powered cell is from the nearest generator feeding its grid.
+// Only used to stagger the pulse — every powered cell lights either way, so
+// this decides timing, never outcome.
+function pulseDepths(world, powered) {
+  const depth = new Map();
+  let frontier = [];
+  for (const cell of powered) {
+    if (generationOf(buildingFor(cell)) > 0) {
+      depth.set(cell, 0);
+      frontier.push(cell);
     }
   }
+  // A grid with no generator of its own (running purely on the pool) has no
+  // natural origin, so it just lights at once.
+  if (frontier.length === 0) {
+    for (const cell of powered) depth.set(cell, 0);
+    return depth;
+  }
+  const { width, height } = world.level;
+  let d = 1;
+  while (frontier.length > 0) {
+    const next = [];
+    for (const cell of frontier) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = cell.x + dx;
+        const y = cell.y + dy;
+        if (x < 0 || y < 0 || x >= width || y >= height) continue;
+        const neighbour = world.cells[y * width + x];
+        if (!powered.has(neighbour) || depth.has(neighbour)) continue;
+        depth.set(neighbour, d);
+        next.push(neighbour);
+      }
+    }
+    frontier = next;
+    d++;
+  }
+  for (const cell of powered) if (!depth.has(cell)) depth.set(cell, 0);
+  return depth;
+}
 
-  const colony = resolveColony(world);
-  world.energy = Math.max(0, world.energy + colony.energyDelta);
+// Applies a resolved click and then runs the turn. Returns a record of
+// everything that happened, which is what makes the turn explainable
+// afterwards (see log.js) rather than something the UI has to reconstruct.
+//
+// `now` only stamps presentation state — when each cell should appear to
+// pulse. Pass nothing and everything lands at once, which is what a test or a
+// simulation wants.
+export function applyTurn(world, tap, now = 0) {
+  if (!tap.ok) return null;
+
+  const wasPowered = new Set(world.cells.filter((cell) => cell.powered));
+  const energyBefore = world.energy;
+  tap.cell.enabled = tap.kind === "enable";
+
+  const solved = solvePower(world, world.energy);
+  world.energy -= solved.shortfall;
+
+  const colony = resolveColony(world, solved.powered);
+  const income = poolIncome(world, solved.powered, colony);
+  const starvation = starvationCost(world, colony);
+  world.energy = Math.max(0, world.energy + income - starvation);
+
+  // Stamp the pulse. Cells that were already powered keep their existing
+  // timestamp so a steady grid doesn't re-flash from scratch every turn;
+  // newly powered ones ripple out from their generator.
+  const depths = pulseDepths(world, solved.powered);
+  for (const cell of world.cells) {
+    const powered = solved.powered.has(cell);
+    if (powered && !wasPowered.has(cell)) cell.litAt = now + depths.get(cell) * RIPPLE_STEP;
+    else if (!powered) cell.litAt = null;
+    cell.powered = powered;
+    if (powered) cell.seen = true;
+  }
 
   return {
     kind: tap.kind,
     cell: tap.cell,
-    energySpent: tap.energyCost,
     energyBefore,
     energyAfter: world.energy,
-    lit,
-    cleared,
-    reactedDrains,
-    before,
+    shortfall: solved.shortfall,
+    income,
+    starvation,
+    lit: [...solved.powered].filter((c) => !wasPowered.has(c)),
+    darkened: [...wasPowered].filter((c) => !solved.powered.has(c)),
+    dark: solved.dark,
     colony,
+    groups: solved.groups,
   };
 }
 
 // Convenience for tests and simulations: resolve and apply in one call.
-// Returns the resolved tap so a caller can tell whether anything happened.
 export function tap(world, cell, now = 0) {
   const resolved = resolveTap(world, cell);
-  applyTap(world, resolved, now);
+  applyTurn(world, resolved, now);
   return resolved;
 }
 
-// Whether any tap could still change the board in a way that moves the run
-// forward. Deliberately ignores a cull: it's free and reversible, so its mere
-// availability shouldn't keep a run "in progress" forever.
-//
-// Because this asks resolveTap the same question the player's finger does, it
-// can't disagree with what tapping actually does — affordability included.
-export function hasProductiveMove(world) {
-  // One visibility pass shared across every cell, rather than recomputing it
-  // per candidate.
-  const visible = visibleCells(world);
-  return world.cells.some((cell) => {
-    const resolved = resolveTap(world, cell, visible);
-    return resolved.ok && resolved.kind !== "cull";
-  });
+// Solves the board without a click — used to settle the opening position, so
+// a level that starts with tiles already enabled is powered before turn one.
+export function settle(world) {
+  const solved = solvePower(world, world.energy);
+  for (const cell of world.cells) {
+    cell.powered = solved.powered.has(cell);
+    if (cell.powered) cell.seen = true;
+  }
+  return solved;
 }
 
-// How much of the board is lit, as a fraction of every cell on it — inert
-// ones included, which is what ties a level's completionGoal to its density.
-export function activatedFraction(world) {
-  const activated = world.cells.filter((cell) => cell.active).length;
-  return activated / world.cells.length;
+// How much of the board is powered right now, as a fraction of every cell —
+// inert ones included, which is what ties a level's goal to its density.
+export function poweredFraction(world) {
+  return world.cells.filter((cell) => cell.powered).length / world.cells.length;
+}
+
+// How much of the board has ever been seen. Monotonic, unlike powered.
+export function revealedFraction(world) {
+  return world.cells.filter((cell) => cell.seen).length / world.cells.length;
 }

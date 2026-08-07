@@ -21,17 +21,17 @@
 
 import { buildingFor } from "./buildings.js";
 
-// Anything that provides sight. Active cells always qualify — which is what
-// guarantees an active cell is always visible (it's zero steps from itself),
-// so fog can never hide progress you've made, and can never block the free
-// cull that stops a starving colony.
+// Anything that provides sight. Powered cells always qualify — which is what
+// guarantees a powered cell is always visible (it's zero steps from itself),
+// so fog can never hide a running grid, and can never block switching off the
+// thing that's draining you.
 //
 // Cells flagged startsVisible stay sources for the whole run, not just the
 // first turn: they're the level's guaranteed foothold, and a seed that
 // stopped counting the moment you activated something could strand a run
 // that later lost its other sources.
 function sightSources(world) {
-  return world.cells.filter((cell) => cell.active || cell.startsVisible);
+  return world.cells.filter((cell) => cell.powered || cell.startsVisible);
 }
 
 // How far a cell sees. Buildings can extend it locally via `sight` (a tower);

@@ -1,56 +1,30 @@
 [
   {
-    "name": "simple test",
-    "size": {
-      "width": 10,
-      "height": 14
-    },
-    "energyBudget": 4,
-    "completionGoal": 0.12,
-    "attenuation": 1,
-    "powerPlantBoost": 5,
-    "foodPerFarm": 1,
-    "mineYield": 2,
-    "starvationPenalty": 1,
-    "legend": {
-      ".": "desert",
-      "C": "crystal",
-      "R": "redCrystal",
-      "G": "greenCrystal",
-      "D": "drain",
-      "P": "powerPlant",
-      "F": "farm"
-    },
-    "grid": [
-      "..C..CC..C",
-      "CCPCCC.CCC",
-      "C.C.C.FFFF",
-      "C.CC.C..C.",
-      "CC....CC..",
-      "..CC.CCC..",
-      "CC.C.P..CC",
-      ".C.C....C.",
-      "C...CR.C.C",
-      ".CC.CR.C.D",
-      "...C.R.CCC",
-      ".C.C.RCC..",
-      ".....C....",
-      "C.CCC.CCC."
-    ]
-  },
-  {
     "name": "recolonized",
     "size": {
       "width": 8,
       "height": 10
     },
-    "energyBudget": 8,
-    "completionGoal": 0.2,
-    "attenuation": 1,
-    "powerPlantBoost": 5,
+    "energyBudget": 12,
     "foodPerFarm": 1,
-    "mineYield": 2,
     "starvationPenalty": 1,
+    "fogDistance": 2,
+    "goal": {
+      "kind": "powered",
+      "value": 0.2
+    },
+    "startsVisible": [
+      [
+        2,
+        4
+      ]
+    ],
+    "startsEnabled": [
+      [
+        2,
+        4
+      ]
+    ],
     "legend": {
       ".": "desert",
       "C": "crystal",
@@ -78,87 +52,13 @@
       "width": 8,
       "height": 10
     },
-    "energyBudget": 8,
-    "completionGoal": 0.2,
-    "attenuation": 1,
-    "powerPlantBoost": 5,
+    "energyBudget": 15,
     "foodPerFarm": 1,
-    "mineYield": 2,
     "starvationPenalty": 1,
-    "legend": {
-      ".": "desert",
-      "C": "crystal",
-      "P": "powerPlant",
-      "H": "residential",
-      "F": "farm",
-      "M": "mine",
-      "R": "redCrystal"
+    "goal": {
+      "kind": "powered",
+      "value": 0.25
     },
-    "grid": [
-      "HHH..HFF",
-      "HHH.MCCC",
-      "HHH..HFC",
-      ".P.P...P",
-      ".M.MPC.F",
-      ".C.C.C.F",
-      "CC.C.C.F",
-      "C.CC.C.C",
-      "C.P..MPC",
-      "P..MMP.."
-    ]
-  },
-  {
-    "name": "Foo",
-    "size": {
-      "width": 10,
-      "height": 14
-    },
-    "energyBudget": 4,
-    "completionGoal": 0.12,
-    "attenuation": 1,
-    "powerPlantBoost": 5,
-    "foodPerFarm": 1,
-    "mineYield": 2,
-    "starvationPenalty": 1,
-    "legend": {
-      ".": "desert",
-      "C": "crystal",
-      "R": "redCrystal",
-      "G": "greenCrystal",
-      "D": "drain",
-      "P": "powerPlant",
-      "F": "farm"
-    },
-    "grid": [
-      "..C..CC..C",
-      "CCPCCC.CCC",
-      "C.C.C.FFFF",
-      "C.CC.C..C.",
-      "CC....CC..",
-      "..CC.CCC..",
-      "CC.C.P..CC",
-      ".C.C....C.",
-      "C...CR.C.C",
-      ".CC.CR.C.D",
-      "...C.R.CCC",
-      ".C.C.RCCP.",
-      ".....C....",
-      "C.CCC.CCC."
-    ]
-  },
-  {
-    "name": "Outpost",
-    "size": {
-      "width": 8,
-      "height": 10
-    },
-    "energyBudget": 8,
-    "completionGoal": 0.2,
-    "attenuation": 1,
-    "powerPlantBoost": 5,
-    "foodPerFarm": 1,
-    "mineYield": 2,
-    "starvationPenalty": 1,
     "legend": {
       ".": "desert",
       "C": "crystal",

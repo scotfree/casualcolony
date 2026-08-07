@@ -86,7 +86,7 @@ export function drawHud(ctx, width, view, layout) {
   ctx.textAlign = "left";
   ctx.fillText(view.name, 14, row1);
 
-  let statsText = `${view.activated} / ${view.total} activated   ⚡ ${view.energy}`;
+  let statsText = `${view.activated} / ${view.total} powered   ⚡ ${view.energy}`;
   if (view.colony) statsText += `   👥 ${view.colony.population}/${view.colony.foodCapacity}`;
   // The whole line goes warning-red when the colony is starving — simpler and
   // just as legible as splitting it into separately-colored segments.
@@ -152,11 +152,10 @@ function drawOutcomeButton(ctx, button) {
 
 // outcome: { result: "win" | "lose", reason: "energy" | "exhausted" }
 //
-// The headline names what actually ended the run. Board exhaustion can end a
-// run with energy still in the pool (a self-sustaining colony runs out of
-// things to do long before it runs out of energy), so reporting every loss as
-// "Out of energy" would be plainly false half the time.
-export function drawOutcome(ctx, width, height, outcome, fraction, completionGoal, layout) {
+// A loss is always a blackout: the pool is empty *and* a grid has gone dark
+// for want of funding. Being broke with a grid that pays for itself isn't
+// losing, so it never reaches here.
+export function drawOutcome(ctx, width, height, outcome, fraction, goal, layout) {
   ctx.fillStyle = "#12161ce6";
   ctx.fillRect(0, HUD_HEIGHT, width, height - HUD_HEIGHT);
 
@@ -164,19 +163,14 @@ export function drawOutcome(ctx, width, height, outcome, fraction, completionGoa
   ctx.textBaseline = "middle";
   ctx.fillStyle = outcome.result === "win" ? GOOD : BAD;
   ctx.font = "20px ui-monospace, monospace";
-  const headline =
-    outcome.result === "win"
-      ? "You win"
-      : outcome.reason === "energy"
-        ? "Out of energy"
-        : "Nothing left to do";
+  const headline = outcome.result === "win" ? "You win" : "Blackout";
   ctx.fillText(headline, width / 2, height / 2 - 30);
 
   ctx.fillStyle = MUTED;
   ctx.font = LABEL_FONT;
-  const goalPct = Math.round(completionGoal * 100);
+  const goalPct = Math.round(goal.value * 100);
   const gotPct = Math.round(fraction * 100);
-  ctx.fillText(`${gotPct}% activated · goal was ${goalPct}%`, width / 2, height / 2 - 2);
+  ctx.fillText(`${gotPct}% ${goal.kind} · goal was ${goalPct}%`, width / 2, height / 2 - 2);
 
   for (const button of Object.values(layout)) drawOutcomeButton(ctx, button);
 }

@@ -1,133 +1,103 @@
 // Explaining the last turn.
 //
-// The board shows *what* changed — tiles light, the energy number moves —
-// but not why any of it followed from the tile you touched. Several of this
-// game's rules are only visible in their consequences: that propagation past
-// the tapped tile is free, that a mine with nobody living on the board earns
-// nothing, that a tile next to a drain can never stay lit. A player can be
-// surprised by all three and have nowhere to look.
+// The board shows *what* changed but not why it followed from the tile you
+// touched, and under grid budgets the most confusing moments are exactly the
+// ones with no visible cause: a whole component going dark because one more
+// tile tipped it over its generation, or a mine sitting powered and paying
+// nothing because nobody lives there. Each line pairs an effect with the short
+// reason behind it.
 //
-// So each line pairs an effect with the short reason it happened. Only the
-// most recent turn: this is "what did that do", not a history to scroll.
-//
-// Reads the turn record applyTap already produced (rules.js) rather than
-// diffing the board — the turn knows exactly what it did, and re-deriving it
-// afterwards would be guesswork dressed up as fact.
+// Reads the record applyTurn already produced (rules.js) rather than diffing
+// the board — the turn knows what it did, and re-deriving it afterwards would
+// be guesswork.
 
-import { buildingFor } from "./buildings.js";
+import { buildingFor, costOf, generationOf, paysPool } from "./buildings.js";
 
-function at(cell) {
-  return `(${cell.x},${cell.y})`;
-}
+const at = (cell) => `(${cell.x},${cell.y})`;
+const nameOf = (cell) => buildingFor(cell).name;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-function nameOf(cell) {
-  return buildingFor(cell).name;
-}
-
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
-// How many cells currently earning-capable buildings are active — used to
-// explain income, or the lack of it.
-function activeEarners(world) {
-  return world.cells.filter((cell) => cell.active && buildingFor(cell).colony?.flows).length;
-}
-
-// [{ what, why }] describing `turn`, most important first. Empty if no turn
-// has happened yet.
+// [{ what, why }] describing `turn`, most important first.
 export function describeTurn(world, turn) {
   if (!turn) return [];
   const lines = [];
-  const { level } = world;
+  const building = buildingFor(turn.cell);
 
-  // --- What you touched, and what it cost.
-  if (turn.kind === "cull") {
+  if (turn.kind === "enable") {
     lines.push({
-      what: `Culled ${nameOf(turn.cell)} at ${at(turn.cell)} — free`,
-      why: "turning an active residential back off never costs energy, so a starving colony can always be fixed",
-    });
-  } else if (turn.kind === "drain") {
-    lines.push({
-      what: `Tapped Drain at ${at(turn.cell)} — spent ${turn.energySpent} ⚡`,
-      why: "a drain has its own flat cost, and only charges when it actually clears something",
-    });
-    lines.push({
-      what: `Cleared ${plural(turn.cleared.length, "tile")}`,
-      why: "a drain deactivates every activated neighbour, whatever type it is",
+      what: `Switched on ${nameOf(turn.cell)} at ${at(turn.cell)}`,
+      why: `it draws ${costOf(building)} from its grid every turn` +
+        (generationOf(building) > 0
+          ? `, and makes ${generationOf(building)}${paysPool(building) ? " into your pool" : ""}`
+          : ""),
     });
   } else {
     lines.push({
-      what: `Tapped ${nameOf(turn.cell)} at ${at(turn.cell)} — spent ${turn.energySpent} ⚡`,
-      why: "a direct tap pays that tile's own activation cost out of the energy pool",
+      what: `Switched off ${nameOf(turn.cell)} at ${at(turn.cell)}`,
+      why: "switching off is free and immediate — it's how you cut load a grid can't carry",
     });
-
-    const boost = buildingFor(turn.cell).boostKey ? level[buildingFor(turn.cell).boostKey] : 0;
-    if (turn.lit.length === 1) {
-      lines.push({
-        what: "Lit 1 tile",
-        why: "a tap hands a tile exactly its own cost, so there was nothing left over to reach a neighbour",
-      });
-    } else {
-      lines.push({
-        what: `Lit ${plural(turn.lit.length, "tile")}`,
-        why: boost
-          ? `${nameOf(turn.cell)} adds ${boost} signal, and everything past the tapped tile is free`
-          : "each neighbour got enough signal to cover its own activation cost",
-      });
-    }
-
-    if (turn.reactedDrains > 0) {
-      lines.push({
-        what: `${plural(turn.reactedDrains, "drain")} took back ${plural(turn.cleared.length, "tile")}`,
-        why: "a drain absorbs a neighbour the instant it lights, so a tile beside one can never stay lit",
-      });
-    }
   }
 
-  // --- What it did to the colony.
-  // Only what actually moved — reporting "population 0 → 0" because the food
-  // count changed is noise dressed up as information.
-  const { before, colony } = turn;
-  const changes = [];
-  if (before.population !== colony.population) {
-    changes.push(`Population ${before.population} → ${colony.population}`);
-  }
-  if (before.foodCapacity !== colony.foodCapacity) {
-    changes.push(`${changes.length ? "f" : "F"}ood capacity ${before.foodCapacity} → ${colony.foodCapacity}`);
-  }
-  if (changes.length > 0) {
+  // The grids, and whether they can pay for themselves.
+  const strained = turn.groups.filter((g) => g.shortfall > 0);
+  if (turn.groups.length > 0) {
+    const biggest = [...turn.groups].sort((a, b) => b.group.length - a.group.length)[0];
     lines.push({
-      what: changes.join(", "),
-      why: "counted fresh from the board every turn, not tracked — culling drops it the same turn",
+      what: `${plural(turn.groups.length, "grid")}, largest ${plural(biggest.group.length, "tile")}` +
+        ` (makes ${biggest.generation}, costs ${biggest.cost})`,
+      why: "everything wired together shares one budget — a grid runs only if the whole of it is affordable",
     });
   }
 
-  const delta = colony.energyDelta;
-  const earners = activeEarners(world);
-  if (delta > 0) {
+  if (turn.darkened.length > 0) {
     lines.push({
-      what: `+${delta} ⚡ income`,
-      why: `${plural(earners, "mine")} working, colony fed (${colony.population}/${colony.foodCapacity})`,
+      what: `${plural(turn.darkened.length, "tile")} went dark`,
+      why: "a grid that can't cover its own cost browns out entirely — never partly, so the game never picks which tiles to drop",
     });
-  } else if (delta < 0) {
+  } else if (turn.lit.length > 0) {
     lines.push({
-      what: `${delta} ⚡ starvation`,
-      why: `${colony.population} people but food for only ${colony.foodCapacity} — culling a residential stops it`,
+      what: `${plural(turn.lit.length, "tile")} came on`,
+      why: "the pulse spreads out from the generators feeding that grid",
     });
-  } else if (earners > 0 && colony.population === 0) {
-    // The single most confusing "nothing happened": mines that look active
-    // and are producing nothing at all.
+  }
+
+  if (turn.shortfall > 0) {
+    lines.push({
+      what: `−${turn.shortfall} ⚡ upkeep`,
+      why: `${plural(strained.length, "grid")} can't pay for ${strained.length === 1 ? "itself" : "themselves"} — your pool is covering the difference`,
+    });
+  }
+
+  const { colony } = turn;
+  if (turn.income > 0) {
+    lines.push({
+      what: `+${turn.income} ⚡ mined`,
+      why: `colony fed and staffed (${colony.population}/${colony.foodCapacity})`,
+    });
+  } else if (colony.population === 0 && [...turn.dark].length === 0 && hasPoweredMine(world)) {
     lines.push({
       what: "No income",
-      why: `${plural(earners, "mine")} active but nobody lives here — a mine needs a resident to work it`,
+      why: "a mine needs somebody living on the board to work it",
+    });
+  }
+
+  if (turn.starvation > 0) {
+    lines.push({
+      what: `−${turn.starvation} ⚡ starvation`,
+      why: `${colony.population} people, food for ${colony.foodCapacity} — switch a residential off to stop it`,
     });
   }
 
   lines.push({
     what: `Energy ${turn.energyBefore} → ${turn.energyAfter}`,
-    why: turn.energyAfter === 0 ? "at zero, the run ends once nothing is still animating" : "cost first, then income",
+    why: turn.energyAfter === 0
+      ? "empty: any grid that isn't paying for itself goes dark now"
+      : "upkeep first, then what the mines paid back",
   });
 
   return lines;
+}
+
+function hasPoweredMine(world) {
+  return world.cells.some((cell) => cell.powered && paysPool(buildingFor(cell)));
 }

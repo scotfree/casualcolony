@@ -18,7 +18,8 @@ import {
   exportLevelsText, exportIconsText, parseImport, LEVELS_FILENAME, ICONS_FILENAME,
 } from "./exchange.js";
 import { resolveColony, hasColony } from "./colony.js";
-import { resolveTap, applyTap, hasProductiveMove, activatedFraction } from "./rules.js";
+import { solvePower } from "./power.js";
+import { resolveTap, applyTurn, settle, poweredFraction, revealedFraction } from "./rules.js";
 import { describeTurn } from "./log.js";
 import { visibleCells, rememberVisible } from "./visibility.js";
 import { cellAt } from "./grid.js";
@@ -30,7 +31,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.20.0";
+const VERSION = "0.21.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -59,13 +60,6 @@ let levelList = [];
 // an icon that arrived late would show as a visible flash of the default
 // shape, unlike the level set, which can be fetched.
 let iconOverrides = { ...SHIPPED_ICONS, ...loadIconOverrides() };
-
-// Whether any remaining tap could still change the board — recomputed after
-// every successful tap, not every frame, since taps are the only thing that
-// ever changes it. Mining income means energy can climb instead of only
-// draining toward the old "game over at 0" trigger, so a colony level needs a
-// second way to end: running out of anything left to productively tap.
-let boardExhausted = false;
 
 // Board geometry, recomputed on resize.
 let width = 0;
@@ -160,8 +154,10 @@ new ResizeObserver(resize).observe(canvas);
 function startRun(level) {
   world = createRun(level);
   outcome = null;
-  boardExhausted = false;
   lastTurn = null;
+  // A level may open with tiles already switched on; solve before turn one so
+  // the board is showing its real state rather than everything dark.
+  settle(world);
   refreshVisibility();
   setEditMode(false);
   resize();
@@ -265,9 +261,9 @@ function showTilePicker(cell) {
     onSelect: (typeId) => {
       ensureLegendChar(world.level, typeId);
       cell.type = typeId;
-      cell.active = false;
+      cell.enabled = false;
+      cell.powered = false;
       cell.litAt = null;
-      cell.drainedAt = null;
       refreshVisibility();
       pickerCell = null;
       modals.closeModal();
@@ -380,33 +376,23 @@ canvas.addEventListener("pointerdown", (event) => {
   // The whole turn, in one call each way: what would this do, then do it.
   const resolved = resolveTap(world, cell);
   if (!resolved.ok) return;
-  lastTurn = applyTap(world, resolved, performance.now());
+  lastTurn = applyTurn(world, resolved, performance.now());
   refreshVisibility();
 
-  // A free cull can pull energy back above 0 by fixing "fed" status — if that
-  // happens the run isn't over after all, so clear any outcome reached for it
-  // (and the buttons that came with it).
-  if (world.energy > 0 && outcome) {
+  // Switching something off can pull the run back from the brink, so an
+  // outcome already reached is reconsidered rather than final.
+  if (outcome) {
     outcome = null;
     relayoutOutcome();
   }
-  boardExhausted = !hasProductiveMove(world);
 });
 
 // --- Rendering --------------------------------------------------------------
 
 // 0 while dormant, ramping to 1 as the cell finishes lighting up.
 function litProgress(cell, now) {
-  if (!cell.active || cell.litAt === null || now < cell.litAt) return 0;
+  if (!cell.powered || cell.litAt === null || now < cell.litAt) return 0;
   return Math.min((now - cell.litAt) / LIGHT_TIME, 1);
-}
-
-// 1 right when a drain fires, fading to 0 over LIGHT_TIME — a self-pulse so
-// tapping a drain reads as "this did something" even before you spot the
-// neighbour it drained going dark.
-function drainPulse(cell, now) {
-  if (cell.drainedAt === null) return 0;
-  return Math.max(0, 1 - (now - cell.drainedAt) / LIGHT_TIME);
 }
 
 // Fog has three states, and they're three different questions. Unseen: you
@@ -431,32 +417,49 @@ function drawCell(cell, now) {
     return;
   }
 
-  // A drain never activates itself, but still flashes briefly the moment it
-  // fires. Everything else uses ordinary lit progress.
-  const t = building.drain ? drainPulse(cell, now) : litProgress(cell, now);
+  const t = litProgress(cell, now);
 
   ctx.save();
   ctx.translate(originX + cell.x * cellSize, originY + cell.y * cellSize);
   if (!inSight) ctx.globalAlpha = 0.34; // remembered, not currently in sight
   paintTile(ctx, cellSize, building, t, iconOverrides);
+  // Switched on but dark: the grid can't afford it. Drawn as a hollow marker
+  // so an over-committed component is visibly *your doing* rather than just
+  // absent — it's the feedback that tells you to cut load or add generation.
+  if (cell.enabled && !cell.powered) {
+    const pad = Math.max(1, Math.round(cellSize * 0.06));
+    ctx.strokeStyle = "#5c4a2a";
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(pad, pad, cellSize - pad * 2, cellSize - pad * 2, Math.round(cellSize * 0.2));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.restore();
 }
 
-// Settles the win/lose outcome once the board can't change any further —
-// energy ran out, or nothing productive is left to tap — and every scheduled
-// cascade has finished animating, so the last ripple still gets to play out
-// before the outcome screen appears.
+// How much of what the level asks for you currently have.
+function goalProgress() {
+  return world.level.goal.kind === "revealed"
+    ? revealedFraction(world)
+    : poweredFraction(world);
+}
+
+// Settles the outcome. A win the moment the goal is met; a loss when the pool
+// is empty *and* something is dark for want of funding — being broke with a
+// grid that pays for itself isn't losing, it's just being poor, and you can
+// still build within your means. Waits for the pulse to finish so the last
+// ripple plays out before the screen appears.
 function updateOutcome(now) {
   if (!world || outcome) return;
-  const outOfEnergy = world.energy <= 0;
-  if (!outOfEnergy && !boardExhausted) return;
   for (const cell of world.cells) {
-    if (cell.active && cell.litAt !== null && now < cell.litAt + LIGHT_TIME) return;
+    if (cell.powered && cell.litAt !== null && now < cell.litAt + LIGHT_TIME) return;
   }
-  outcome = {
-    result: activatedFraction(world) >= world.level.completionGoal ? "win" : "lose",
-    reason: outOfEnergy ? "energy" : "exhausted",
-  };
+  const met = goalProgress() >= world.level.goal.value;
+  const broke = world.energy <= 0 && solvePower(world).dark.size > 0;
+  if (!met && !broke) return;
+  outcome = { result: met ? "win" : "lose", reason: met ? "goal" : "blackout" };
   relayoutOutcome();
 }
 
@@ -474,22 +477,19 @@ function render(now) {
 
   drawHud(ctx, width, {
     name: world.level.name,
-    activated: world.cells.filter((cell) => cell.active).length,
+    activated: world.cells.filter((cell) => cell.powered).length,
     total: world.cells.length,
     energy: world.energy,
     // Only shown for levels that actually use the colony economy — no reason
     // to clutter "0/0" onto a level with no colony tiles at all.
-    colony: hasColony(world) ? resolveColony(world) : null,
+    colony: hasColony(world) ? resolveColony(world, new Set(world.cells.filter((c) => c.powered))) : null,
     editMode,
   }, buttons);
 
   // Not while editing — the outcome screen would otherwise block the board
   // you're trying to click, and edit mode always ends in a reset anyway.
   if (outcome && !editMode) {
-    drawOutcome(
-      ctx, width, height, outcome,
-      activatedFraction(world), world.level.completionGoal, outcomeButtons
-    );
+    drawOutcome(ctx, width, height, outcome, goalProgress(), world.level.goal, outcomeButtons);
   }
 }
 

@@ -4,92 +4,55 @@
 // character in a level file — nothing else. If a new type needs a branch
 // somewhere else in the codebase, this table is the wrong shape.
 //
-// propagate(world, cell) returns the cells this building *could* hand signal
-// to when it activates — every orthogonal neighbour capable of activating at
-// all (see activatable() below), restricted to an axis for red/green
-// crystal. Whether a given neighbour actually activates depends on whether
-// enough signal survives to cover its own activationCost — see cascade.js.
-// Omit propagate for buildings that never spread (desert, drain).
+// **One currency.** Everything below is energy. There used to be two — an
+// energy "pool" the player spent on taps, and an ephemeral "signal" that
+// decayed as a cascade travelled — which was a comprehension tax with no
+// payoff. Now a tile has a cost, maybe some generation, maybe some storage,
+// and the grid either affords itself or it doesn't (see power.js).
 //
-// activationCost is how much signal a cell must receive to activate — a
-// property of the *type*, not the level, so a crystal (cheap, 1) can carry a
-// signal much further than a mine (steep, 3) ever could. It applies the same
-// way to a direct tap: a tap hands the tapped cell exactly its own cost,
-// which trivially covers it (see cascade.js), so a tap never fails outright
-// — but that leaves nothing over to hand a neighbour except this cell's own
-// boost, which is 0 for everything but a power plant. A building with no
-// activationCost can never be a propagation target (desert, drain — see
-// activatable()).
+//   cost       — energy this tile consumes every turn while it's powered.
+//   generation — energy it produces every turn while powered. 0 for most.
+//   storage    — energy it can hold across a turn boundary. This is what
+//                lets a generator start *itself*: energy can't pay for the
+//                turn that produces it, so a generator needs enough banked
+//                to cover its own cost, or it only ever fires once from the
+//                click that enabled it. storage >= cost means "runs forever
+//                once switched on"; storage 0 with big generation would be a
+//                one-shot flare. (Batteries that buffer energy for *other*
+//                tiles are a later feature — see design.md.)
+//   output     — where generation goes: "grid" (default, pays for the
+//                component's own costs) or "pool" (the player's reserve).
+//                A mine is the only thing that pays into the pool, which is
+//                exactly what makes it the refill.
 //
-// drain(world, cell) returns the already-activated cells this building
-// deactivates when tapped. It's the inverse of propagate — a tap here
-// undoes neighbours' activation instead of spreading its own. Omit it for
-// buildings that don't drain.
+// conducts says which neighbours this tile is wired to, and it's symmetric:
+// "all" for the ordinary case, "vertical"/"horizontal" for red/green
+// crystal, and omitted for inert tiles that aren't part of any grid.
 //
-// boostKey names a field on the level itself holding how much this building
-// adds to the signal when it activates, before that signal is spent on
-// whatever it reaches next. Omit it for buildings that don't amplify — see
-// cascade.js. Boost lives on the level, not a hardcoded number here, so
-// different levels can tune it without a new building type.
+// What that buys is **parallel buses with no gap between them**: a 2x2 block
+// of red crystal is two independent vertical runs, touching, rather than one
+// blob — where plain crystal would merge it. That's the dense-layout win.
+// Note it does *not* let two runs cross: a green row lying across a red run
+// breaks it, because the tile at the junction has only one axis. A true
+// crossover would need a tile carrying both axes as separate channels, which
+// is a different feature (see design.md).
 //
 // colony describes how an activated building participates in the colony
 // economy (see colony.js), as declared resources rather than named flags:
-//
-//   stocks — resources recounted from scratch every tap, describing what the
-//     board currently *is* (population, food capacity). Not accumulated.
-//   flows  — resources added to the player's pool every tap, describing what
-//     the board currently *earns* (energy). Accumulated.
-//   requiresLabor — this building only produces its flows while the colony
-//     is fed and someone actually lives there. A mine with nobody to work it
-//     earns nothing.
-//
-// An amount is either a literal number or the *name* of a level knob (see
-// level.js's LEVEL_NUMBERS), looked up per level — so "how much does a farm
-// feed" stays level-tunable without colony.js knowing which knob belongs to
-// which building. Adding a building that produces a brand-new resource takes
-// one entry here and nothing else; colony.js sums whatever it finds.
-//
-// The colony economy is resolved fresh every tap, separately from cascades —
-// resolveColony only ever reads cell.active, so it doesn't care whether a
-// cell got there by direct tap or by propagation.
+// `stocks` are recounted from the board every turn (population, food
+// capacity), and `requiresLabor` marks a job that only runs while the colony
+// is fed and someone actually lives there.
 //
 // legendChar is the character this type is written as in a level file's grid.
-// Levels carry their own legend (a level may spell crystal any way it likes),
-// but this is the character the editor reaches for when a level gains a type
-// its legend has never seen — so a type's "usual" letter lives with the type,
-// not in a separate table somewhere else.
 //
-// toggle: true means tapping an already-activated cell of this type
-// deactivates it instead of no-opping — see game.js. Residential is the
-// only one: it's how a player fixes a starving colony themselves, rather
-// than the game picking who starves.
+// Every non-inert tile can be switched off again by clicking it. That used to
+// be residential's special "free cull"; under per-turn power it's the general
+// way you fix a grid you can't afford, so it isn't a per-type flag any more.
 //
-// shape names the glyph game.js draws at a tile's center — "plus", "bolt",
-// "person", "leaf", "dollar", "x", or omitted for no icon (desert). iconColor
-// is that glyph's color, always at full brightness: activation never dims
-// it, so a tile's *type* reads at a glance whether or not it's lit. Only
-// fill/stroke (at rest) versus activeFill/glow (once active) change with
-// state — see game.js's paintTile. That split is deliberate: "what is this"
-// and "is it active" are two different questions and shouldn't share one
-// visual signal.
-
-import { orthogonalNeighbours, verticalNeighbours, horizontalNeighbours } from "./grid.js";
-
-// A cell can only ever be a propagation target if it's capable of
-// activating at all — desert and drain are permanently excluded (inert),
-// but every other type is now fair game for a neighbour's signal to reach,
-// not just same-family ones. Whether it actually *does* activate is a
-// separate question, decided in cascade.js by comparing what's left of the
-// signal against the target's own activationCost.
-function activatable(neighbours) {
-  return neighbours.filter((n) => !buildingFor(n).inert);
-}
-
-// Shared by every type whose signal reaches evenly in all 4 directions
-// (everything except red/green crystal, which are axis-locked).
-function propagateOrthogonal(world, cell) {
-  return activatable(orthogonalNeighbours(world, cell));
-}
+// shape names the glyph the renderer draws at a tile's center — "plus",
+// "bolt", "person", "leaf", "dollar", "x", or omitted for no icon (desert).
+// iconColor is that glyph's color, always at full brightness: powering never
+// dims it, so a tile's *type* reads at a glance whether or not it's lit.
 
 export const BUILDINGS = {
   desert: {
@@ -112,8 +75,8 @@ export const BUILDINGS = {
     glow: "#2dd4bf",
     iconColor: "#f3f7fa",
     shape: "plus",
-    activationCost: 1,
-    propagate: propagateOrthogonal,
+    cost: 1,
+    conducts: "all",
   },
 
   redCrystal: {
@@ -127,12 +90,9 @@ export const BUILDINGS = {
     glow: "#ef4444",
     iconColor: "#f87171",
     shape: "plus",
-    activationCost: 1,
-
-    // Same as crystal, but only reaches along the north/south axis.
-    propagate(world, cell) {
-      return activatable(verticalNeighbours(world, cell));
-    },
+    cost: 1,
+    // Wired north/south only, so two adjacent columns of it stay separate.
+    conducts: "vertical",
   },
 
   greenCrystal: {
@@ -146,12 +106,8 @@ export const BUILDINGS = {
     glow: "#84cc16",
     iconColor: "#a3e635",
     shape: "plus",
-    activationCost: 1,
-
-    // Same as crystal, but only reaches along the east/west axis.
-    propagate(world, cell) {
-      return activatable(horizontalNeighbours(world, cell));
-    },
+    cost: 1,
+    conducts: "horizontal",
   },
 
   powerPlant: {
@@ -165,10 +121,12 @@ export const BUILDINGS = {
     glow: "#f59e0b",
     iconColor: "#fbbf24",
     shape: "bolt",
-    activationCost: 1,
-    // See the level's powerPlantBoost (level.js) for the actual amount.
-    boostKey: "powerPlantBoost",
-    propagate: propagateOrthogonal,
+    cost: 1,
+    generation: 5,
+    // Enough banked to cover its own cost, so it restarts itself every turn
+    // rather than needing a click. Net +4 to whatever it's wired into.
+    storage: 1,
+    conducts: "all",
   },
 
   residential: {
@@ -182,12 +140,9 @@ export const BUILDINGS = {
     glow: "#0ea5e9",
     iconColor: "#38bdf8",
     shape: "person",
-    // Costlier than crystal on purpose: a crystal network can spill into a
-    // colony cluster, but rarely deep — see mine's activationCost below.
-    activationCost: 2,
+    cost: 2,
+    conducts: "all",
     colony: { stocks: { population: 1 } },
-    toggle: true,
-    propagate: propagateOrthogonal,
   },
 
   farm: {
@@ -201,9 +156,9 @@ export const BUILDINGS = {
     glow: "#22c55e",
     iconColor: "#4ade80",
     shape: "leaf",
-    activationCost: 2,
+    cost: 2,
+    conducts: "all",
     colony: { stocks: { food: "foodPerFarm" } },
-    propagate: propagateOrthogonal,
   },
 
   mine: {
@@ -217,37 +172,66 @@ export const BUILDINGS = {
     glow: "#dc2626",
     iconColor: "#ef4444",
     shape: "dollar",
-    // The steepest activation cost on the board: a mine can still be
-    // *reached* by a strong enough crystal chain, but it eats most of
-    // whatever signal is left, so propagation rarely survives past one.
-    activationCost: 3,
-    colony: { flows: { energy: "mineYield" }, requiresLabor: true },
-    propagate: propagateOrthogonal,
+    cost: 3,
+    // Paid into the player's reserve rather than back into the grid — the
+    // only thing that refills what you spend.
+    generation: 2,
+    output: "pool",
+    conducts: "all",
+    colony: { requiresLabor: true },
   },
 
   drain: {
     id: "drain",
     name: "Drain",
     legendChar: "D",
-    inert: true,
+    inert: false,
     fill: "#241c2c",
     stroke: "#3c2d47",
     activeFill: "#372a45",
-    // Static marker — a drain never activates, so its icon is always
-    // visible at rest, with only a brief brighter pulse (glow) the moment
-    // it actually drains something.
     glow: "#c084fc",
     iconColor: "#a855f7",
     shape: "x",
-
-    // Tapping a drain deactivates every orthogonally adjacent activated
-    // cell, regardless of type. It never activates anything itself.
-    drain(world, cell) {
-      return orthogonalNeighbours(world, cell).filter((n) => n.active);
-    },
+    // Expensive to keep powered and gives nothing back — it still "costs you
+    // progress", but now as upkeep rather than as a special-cased mechanic
+    // that reached out and switched neighbours off.
+    cost: 4,
+    conducts: "all",
   },
 };
 
 export function buildingFor(cell) {
   return BUILDINGS[cell.type];
+}
+
+// What a tile costs to run, produces, and can bank. Defaults keep the table
+// terse: most tiles only declare a cost.
+export function costOf(building) {
+  return building.cost ?? 0;
+}
+
+export function generationOf(building) {
+  return building.generation ?? 0;
+}
+
+export function storageOf(building) {
+  return building.storage ?? 0;
+}
+
+// Whether generation feeds the grid it sits in, or the player's pool.
+export function paysPool(building) {
+  return building.output === "pool";
+}
+
+// Whether a building can bring itself up each turn.
+//
+// This only bites on things that feed the *grid they sit in*: energy can't pay
+// for the turn that produces it, so such a generator needs enough banked to
+// cover its own cost or it can never restart. Anything that exports to the
+// pool is, from its grid's point of view, just a load like any other — the
+// grid powers it and it ships its output elsewhere, so there's nothing to
+// bootstrap. Same for tiles that generate nothing at all.
+export function selfStarting(building) {
+  if (paysPool(building)) return true;
+  return generationOf(building) === 0 || storageOf(building) >= costOf(building);
 }

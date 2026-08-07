@@ -37,22 +37,20 @@ import { BUILDINGS } from "./buildings.js";
 //   error    — the whole message, for a field the default phrasing misfits
 const LEVEL_NUMBERS = {
   energyBudget: {
-    required: true, integer: true, min: 1,
-    label: "a positive integer energyBudget",
+    required: true, integer: true, min: 0,
+    // 0 is legitimate now: a level can hand you a grid that pays for itself
+    // and no reserve at all.
+    label: "a non-negative integer energyBudget",
   },
   completionGoal: {
-    required: true, min: 0, max: 1, exclusiveMin: true,
+    default: 0.2, min: 0, max: 1, exclusiveMin: true,
     label: "completionGoal between 0 (exclusive) and 1 (inclusive)",
+    error: "Level's completionGoal must be between 0 (exclusive) and 1 (inclusive)",
   },
-  // How much a power plant boosts signal passing through it. Unlike
-  // activation cost, which is a property of the building *type* (see
-  // buildings.js), boost stays level-tunable: "how far can a plant reach" is
-  // a real level-design lever.
-  powerPlantBoost: { default: 5, min: 0, label: "powerPlantBoost" },
-  // The colony economy's knobs — see colony.js for how they combine, and
-  // buildings.js for which building refers to which by name.
+  // The colony economy's knobs — see colony.js. Cost and generation are no
+  // longer level-tunable: they're properties of what a tile *is* (see
+  // buildings.js), and having them in two places was half the confusion.
   foodPerFarm: { default: 1, min: 0, label: "foodPerFarm" },
-  mineYield: { default: 2, min: 0, label: "mineYield" },
   starvationPenalty: { default: 1, min: 0, label: "starvationPenalty" },
   // How far visibility reaches from anything that provides it, in plain
   // Manhattan steps — see visibility.js. -1 means no fog at all, which is how
@@ -91,6 +89,43 @@ function parseNumbers(data) {
   return out;
 }
 
+// Flags the cells named by a sparse [x, y] list. Sparse rather than a second
+// full-board grid: it's usually a handful of tiles, and a mask of mostly-blank
+// rows would be noise to read and to diff.
+function markCells(cells, size, pairs, field) {
+  if (pairs === undefined) return;
+  if (!Array.isArray(pairs)) {
+    throw new Error(`Level's ${field} must be an array of [x, y] pairs`);
+  }
+  for (const pair of pairs) {
+    if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(Number.isInteger)) {
+      throw new Error(`Level's ${field} entries must be [x, y] pairs`);
+    }
+    const [x, y] = pair;
+    if (x < 0 || y < 0 || x >= size.width || y >= size.height) {
+      throw new Error(`Level's ${field} has (${x},${y}) outside the board`);
+    }
+    cells[y * size.width + x][field] = true;
+  }
+}
+
+// What a level asks for. `powered` is a snapshot — how much is running right
+// now — and is the systems-shaped goal. `revealed` is monotonic, counting
+// anything ever seen. An old level's bare completionGoal reads as `powered`.
+const GOAL_KINDS = new Set(["powered", "revealed"]);
+
+function parseGoal(goal, completionGoal) {
+  if (goal === undefined) return { kind: "powered", value: completionGoal };
+  if (!goal || typeof goal !== "object") throw new Error("Level's goal must be an object");
+  if (!GOAL_KINDS.has(goal.kind)) {
+    throw new Error(`Level's goal.kind must be one of: ${[...GOAL_KINDS].join(", ")}`);
+  }
+  if (typeof goal.value !== "number" || goal.value <= 0 || goal.value > 1) {
+    throw new Error("Level's goal.value must be between 0 (exclusive) and 1 (inclusive)");
+  }
+  return { kind: goal.kind, value: goal.value };
+}
+
 // Parses and validates a level record into an immutable level definition.
 // Its `cells` are plain {x, y, type} — the board's *shape*, with none of the
 // per-attempt state that createRun adds.
@@ -99,7 +134,7 @@ export function parseLevel(data) {
     throw new Error("Level is not an object");
   }
 
-  const { name, size, legend, grid, startsVisible } = data;
+  const { name, size, legend, grid, startsVisible, startsEnabled, goal } = data;
 
   if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) {
     throw new Error("Level needs integer size.width and size.height");
@@ -140,7 +175,7 @@ export function parseLevel(data) {
       if (!typeId) {
         throw new Error(`Unknown character '${char}' at row ${y}, column ${x}`);
       }
-      cells.push({ x, y, type: typeId, startsVisible: false });
+      cells.push({ x, y, type: typeId, startsVisible: false, startsEnabled: false });
     }
   }
 
@@ -149,21 +184,11 @@ export function parseLevel(data) {
   // and the run can't begin — see visibility.js. A sparse coordinate list
   // rather than a second grid: it's usually one or two tiles, and a
   // full-board mask of mostly-blank rows would be noise to read and to diff.
-  if (startsVisible !== undefined) {
-    if (!Array.isArray(startsVisible)) {
-      throw new Error("Level's startsVisible must be an array of [x, y] pairs");
-    }
-    for (const pair of startsVisible) {
-      if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(Number.isInteger)) {
-        throw new Error("Level's startsVisible entries must be [x, y] pairs");
-      }
-      const [x, y] = pair;
-      if (x < 0 || y < 0 || x >= size.width || y >= size.height) {
-        throw new Error(`Level's startsVisible has (${x},${y}) outside the board`);
-      }
-      cells[y * size.width + x].startsVisible = true;
-    }
-  }
+  markCells(cells, size, startsVisible, "startsVisible");
+  // Tiles already switched on when the run begins. This is what lets a level
+  // open mid-situation — a grid already running at a deficit, with just enough
+  // pool to fix it before the lights go out.
+  markCells(cells, size, startsEnabled, "startsEnabled");
 
   return {
     name: name || "Untitled",
@@ -174,6 +199,7 @@ export function parseLevel(data) {
     // can know which building types this level's author actually chose.
     legend,
     ...parseNumbers(data),
+    goal: parseGoal(goal, parseNumbers(data).completionGoal),
   };
 }
 
@@ -197,7 +223,12 @@ export function createRun(level) {
       // can toggle which ones seed visibility.
       type: cell.type,
       startsVisible: cell.startsVisible,
-      active: false,
+      startsEnabled: cell.startsEnabled,
+      // The player's switch, and whether the grid is actually carrying it.
+      // Two different questions: an enabled tile in an over-committed
+      // component is switched on but dark (see power.js).
+      enabled: cell.startsEnabled,
+      powered: false,
       litAt: null,
       // Whether this cell has ever been visible this run. Fog gates what you
       // can *do*, but hiding what you've already seen would only tax memory —
@@ -262,5 +293,8 @@ export function serializeLevel(world, name) {
   // record stays exactly as small as it was before fog existed.
   const seeds = world.cells.filter((cell) => cell.startsVisible).map((cell) => [cell.x, cell.y]);
   if (seeds.length > 0) record.startsVisible = seeds;
+  const on = world.cells.filter((cell) => cell.startsEnabled).map((cell) => [cell.x, cell.y]);
+  if (on.length > 0) record.startsEnabled = on;
+  record.goal = level.goal;
   return record;
 }
