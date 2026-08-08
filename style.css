@@ -46,6 +46,9 @@ body {
   color: #ffffff;
   font-size: 11px;
   pointer-events: none;
+  /* Above the title screen: "which build am I on?" is a question you most
+     often have before starting a run, not during one. */
+  z-index: 21;
 }
 
 /* Opposite corner from #version, and actually tappable — opens the
@@ -66,6 +69,7 @@ body {
   font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
   text-decoration: none;
   touch-action: manipulation;
+  z-index: 21;
 }
 
 #manual-link:hover,
@@ -353,4 +357,145 @@ body {
   color: #7e93a6;
   font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
   margin-top: 3px;
+}
+
+/* --- Title screen ---------------------------------------------------------
+   Not a modal. A modal sits over a run you're in the middle of and closes
+   back to it; this is where a run comes *from*, so it's opaque, it owns level
+   choice and the editor entry point, and it leaves the HUD during a run free
+   to be only about the run. Shares the modal's visual language so the game
+   still looks like one thing. */
+#title {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: #12161c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: calc(env(safe-area-inset-top) + 24px) 20px
+           calc(env(safe-area-inset-bottom) + 48px);
+  box-sizing: border-box;
+  touch-action: manipulation;
+}
+
+#title.hidden { display: none; }
+
+#title-inner {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: auto;
+}
+
+#title-name {
+  margin: 0;
+  color: #e8eef4;
+  font: 600 26px ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+/* The crystal glow from the board, so the title reads as the same object as
+   the thing it launches. */
+#title-name::after {
+  content: "";
+  display: block;
+  width: 42px;
+  height: 2px;
+  margin: 12px auto 0;
+  border-radius: 2px;
+  background: #2dd4bf;
+  box-shadow: 0 0 10px 1px #2dd4bf;
+}
+
+#title-tag {
+  margin: 10px 0 22px;
+  color: #7e93a6;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  line-height: 1.5;
+}
+
+#title-levels,
+#title-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#title-actions { margin-top: 18px; }
+
+.title-heading {
+  color: #8ea3b5;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 4px 8px 6px;
+}
+
+/* A level is one row with two targets: play it, or open it in the editor.
+   Same split as the tile picker's option-row, for the same reason — two
+   different actions on the same thing shouldn't share one tap. */
+.title-level {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.title-play {
+  flex: 1;
+  text-align: left;
+  background: #1a1f28;
+  border: 1px solid #2a3441;
+  border-radius: 9px;
+  color: #c7d3de;
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 11px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.title-play:hover,
+.title-play:focus-visible {
+  border-color: #5eead4;
+  color: #5eead4;
+  outline: none;
+}
+
+.title-edit {
+  width: 42px;
+  background: transparent;
+  border: 1px solid #2a3441;
+  border-radius: 9px;
+  color: #8ea3b5;
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.title-edit:hover,
+.title-edit:focus-visible {
+  border-color: #5eead4;
+  color: #5eead4;
+  outline: none;
+}
+
+.title-action {
+  background: transparent;
+  border: 1px solid #2a3441;
+  border-radius: 9px;
+  color: #8ea3b5;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 10px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.title-action:hover,
+.title-action:focus-visible {
+  border-color: #5eead4;
+  color: #5eead4;
+  outline: none;
 }

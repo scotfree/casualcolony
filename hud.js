@@ -42,14 +42,20 @@ export function hudLayout(ctx, width, editMode, name = "") {
     h: HUD_HEIGHT,
   };
 
-  // Laid out right to left. `log` explains the turn you just took, so it's
-  // hidden while editing — there are no turns in there to explain, and
-  // dropping it keeps the two edit-mode labels from crowding the name.
+  // Laid out right to left. During a run these are only about the run you're
+  // in: replay it, or leave it. Choosing a *different* level and opening the
+  // editor both live on the title screen (title.js), because they throw the
+  // run away and shouldn't sit a tap from the board.
+  //
+  // `log` explains the turn you just took, so it's hidden while editing —
+  // there are no turns in there to explain, and dropping it keeps the
+  // edit-mode labels from crowding the name.
   const rightButtons = [
-    ["reset", editMode ? "save as" : "level", 26],
-    ["edit", editMode ? "restart" : "edit", 24],
+    ["menu", "menu", 26],
+    ["reset", editMode ? "save as" : "retry", 24],
   ];
-  if (!editMode) rightButtons.push(["log", "log", 24]);
+  if (editMode) rightButtons.push(["edit", "play", 24]);
+  else rightButtons.push(["log", "log", 24]);
 
   let right = width - 14;
   for (const [key, label, padding] of rightButtons) {
@@ -97,7 +103,9 @@ export function drawHud(ctx, width, view, layout) {
   for (const [key, color] of [
     ["legend", BUTTON],
     ["log", BUTTON],
+    ["menu", BUTTON],
     ["reset", BUTTON],
+    // "play" leaves the editor, so it's the way out and reads as the primary.
     ["edit", view.editMode ? GOOD : BUTTON],
   ]) {
     const button = layout[key];

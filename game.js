@@ -1,10 +1,11 @@
 // Casual Colony — wiring. Input, board rendering, and the frame loop.
 //
-// The rules live in rules.js, the economy in colony.js, the traversal in
-// cascade.js, and everything DOM-shaped in modals.js. What's left here is the
-// part that can only be done with a canvas and a pointer: turning a tap into
-// a cell, drawing the board, and holding the handful of pieces of view state
-// (edit mode, outcome) that aren't part of a run.
+// The rules live in rules.js, the economy in colony.js, the power solve in
+// power.js, the title screen in title.js, and everything else DOM-shaped in
+// modals.js. What's left here is the part that can only be done with a canvas
+// and a pointer: turning a tap into a cell, drawing the board, and holding the
+// handful of pieces of view state (edit mode, outcome) that aren't part of a
+// run.
 //
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
@@ -20,6 +21,7 @@ import {
 import { resolveColony, hasColony } from "./colony.js";
 import { solvePower } from "./power.js";
 import { resolveTap, applyTurn, settle, poweredFraction, revealedFraction } from "./rules.js";
+import { showTitle, hideTitle, titleShowing } from "./title.js";
 import { describeTurn } from "./log.js";
 import { visibleCells, rememberVisible } from "./visibility.js";
 import { cellAt } from "./grid.js";
@@ -31,7 +33,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.23.1";
+const VERSION = "0.24.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -68,7 +70,7 @@ let cellSize = 0;
 let originX = 0;
 let originY = 0;
 // HUD button rects, recomputed whenever their labels could have changed.
-let buttons = { reset: null, edit: null, legend: null };
+let buttons = { reset: null, edit: null, legend: null, menu: null };
 // Outcome-screen button rects, or null while a run is still in progress.
 let outcomeButtons = null;
 
@@ -187,15 +189,26 @@ function saveAs(name) {
   saveLevel(record);
   upsertLevelList(record);
   loadLevelByRecord(record);
+  refreshMenu();
 }
 
 // --- Modal wiring -----------------------------------------------------------
 
-function showLevelPicker() {
-  modals.openLevelPicker({
+// The title screen. Every way out of it starts a run; the only way back to it
+// is the HUD's "menu", so there's exactly one boundary between "choosing what
+// to play" and "playing it".
+// The list can change under the title screen (an import, a "save as"), so
+// anything that touches levelList calls this rather than leaving a stale list
+// on screen.
+function refreshMenu() {
+  if (titleShowing()) showMenu();
+}
+
+function showMenu() {
+  showTitle({
     levels: levelList,
-    currentName: world.level.name,
-    onPick: (record) => { loadLevelByRecord(record); modals.closeModal(); },
+    onPlay: (record) => { loadLevelByRecord(record); hideTitle(); },
+    onEdit: (record) => { loadLevelByRecord(record); setEditMode(true); hideTitle(); },
     onManageData: showDataMenu,
   });
 }
@@ -229,8 +242,11 @@ function showDataMenu() {
           levelList = mergeLevelLists(levelList, result.levels);
           // Re-enter whichever level is now current, so an edited copy of the
           // level being played takes effect rather than sitting unused.
-          const current = levelList.find((r) => r.name === world.level.name);
+          // Only if a run is actually open — imports usually happen straight
+          // off the title screen, where there's nothing to reload into.
+          const current = world && levelList.find((r) => r.name === world.level.name);
           if (current) loadLevelByRecord(current);
+          refreshMenu();
         } else {
           saveIconOverrides(result.icons);
           iconOverrides = { ...iconOverrides, ...result.icons };
@@ -324,25 +340,30 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  if (hitsButton(buttons.edit, hudX, hudY)) {
-    // "Restart" while editing: save over the level as currently loaded, then
-    // start playing the freshly-saved version.
-    if (editMode) saveAs(world.level.name);
-    else setEditMode(true);
+  if (hitsButton(buttons.menu, hudX, hudY)) {
+    showMenu();
+    return;
+  }
+
+  // Only exists in edit mode: save over the level as currently loaded and
+  // start playing the freshly-saved version.
+  if (editMode && hitsButton(buttons.edit, hudX, hudY)) {
+    saveAs(world.level.name);
     return;
   }
 
   if (hitsButton(buttons.reset, hudX, hudY)) {
-    // Same button, different job depending on mode: outside the editor it
-    // picks which level to (re)play; inside it, there's nothing to "pick" —
-    // tapping it means "save what I've built" under a new name instead.
+    // Same button, different job depending on mode. Playing, it replays the
+    // level you're on — the one thing you want most often after a blackout.
+    // Editing, there's nothing to replay: it means "save what I've built"
+    // under a new name.
     if (editMode) {
       modals.openSavePrompt({
         currentName: world.level.name,
         onSave: (name) => { saveAs(name); modals.closeModal(); },
       });
     } else {
-      showLevelPicker();
+      startRun(world.level);
     }
     return;
   }
@@ -522,7 +543,9 @@ requestAnimationFrame(frame);
 loadLevelSet(LEVEL_SET_URL)
   .then((shipped) => {
     levelList = mergeLevelLists(shipped, loadSavedLevels());
-    loadLevelByRecord(levelList[0]);
+    // Straight to the title screen: the game now starts by asking what you
+    // want to play rather than choosing for you.
+    showMenu();
   })
   .catch((error) => {
     loadError = error.message;

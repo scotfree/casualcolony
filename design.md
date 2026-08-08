@@ -1290,6 +1290,30 @@ you feed directly costs you 3 to earn 2. So the pressure is always toward
 wiring things up rather than paying for them one at a time — which is topology
 mattering, in the economy rather than as an assertion.
 
+## Milestone 20 — A title screen, and a HUD that's only about the run
+
+The HUD had grown into two unrelated jobs. `legend` and `log` are about the
+board in front of you; `level` and `edit` throw that board away. Both sets sat
+a single tap apart along the top edge, which is the wrong place for the two
+most destructive controls in the game — and it meant the editor was only
+reachable *through* a run you first had to ignore.
+
+**The title screen owns level choice.** It's a plain DOM screen (`title.js`),
+not a modal: a modal sits over a run and closes back to it, and this is what a
+run comes out of. Each level is one row with two targets — play it, or open it
+in the editor — because those are different intentions rather than a mode you
+have to enter first. `levels & icons…` moved here too, since import/export is
+about the level *set*, which is exactly what this screen is for.
+
+**The HUD is now only the run.** `legend` and `log` on the left and middle;
+`retry` and `menu` on the right. `retry` is the button that was always wanted
+after a blackout and previously took two taps through a level picker. In edit
+mode the same slots become `save as` and `play`, plus `menu`.
+
+**The game boots to the title screen** rather than silently choosing the first
+level, so the first thing it does is ask rather than assume. `openLevelPicker`
+went with it — a screen that no longer has a caller.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1330,6 +1354,8 @@ mattering, in the economy rather than as an assertion.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
+| Level choice and the editor live on a title screen, not in the HUD | They throw the run away, so they shouldn't sit one tap from the board; it also stops the editor being reachable only through a run you have to ignore |
+| A level row offers "play" and "edit" as separate targets | Opening a level to change it and opening it to play it are different intentions, not one overloaded tap |
 | A cascade spreads into tiles the player never touched | Otherwise it isn't a cascade at all — it's a wire lit one segment at a time, which is exactly the bug that made clicking a plant light one tile |
 | There is one move (feed a tile) and no way to switch anything off | The alternative was a tri-state per tile plus a rule about whether an off tile still conducts — more machinery than the game earns |
 | The reserve pays only for tiles you fed; generation pays only for cascades | Letting the wave draw on the reserve emptied the whole pool on turn one: a greedy wave will always spend a stock as if it were an income |

@@ -1,5 +1,8 @@
-// The DOM overlay: tile picker, icon editor, level picker, save prompt, and
-// legend.
+// The DOM overlay: tile picker, icon editor, save prompt, legend, log, and the
+// import/export screens.
+//
+// Choosing a level isn't here — that's the title screen (title.js), which is a
+// screen you come *from* rather than an overlay on a run you're in.
 //
 // Everything else in this game is canvas-drawn, but a list of clickable,
 // labeled options with a selected state is exactly what HTML buttons already
@@ -136,27 +139,6 @@ export function openTileEditor({ typeId, iconOverrides, onSave }) {
     save.textContent = "save";
     save.addEventListener("click", () => onSave(rows.map((row) => row.join(""))));
     parent.appendChild(save);
-  });
-}
-
-export function openLevelPicker({ levels, currentName, onPick, onManageData }) {
-  open((parent) => {
-    addTitle(parent, "choose a level");
-    for (const record of levels) {
-      const button = document.createElement("button");
-      button.className = "option" + (record.name === currentName ? " selected" : "");
-      button.textContent = record.name;
-      button.addEventListener("click", () => onPick(record));
-      parent.appendChild(button);
-    }
-
-    // Getting edits in and out lives here rather than in the HUD: it's about
-    // the set of levels, which is exactly what this screen is already for.
-    const manage = document.createElement("button");
-    manage.className = "option subtle";
-    manage.textContent = "levels & icons…";
-    manage.addEventListener("click", onManageData);
-    parent.appendChild(manage);
   });
 }
 
