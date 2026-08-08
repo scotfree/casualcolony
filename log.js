@@ -23,30 +23,22 @@ export function describeTurn(world, turn) {
   const lines = [];
   const building = buildingFor(turn.cell);
 
-  if (turn.kind === "enable") {
-    lines.push({
-      what: `Switched on ${nameOf(turn.cell)} at ${at(turn.cell)}`,
-      why: `it draws ${costOf(building)} from its grid every turn` +
-        (generationOf(building) > 0
-          ? `, and makes ${generationOf(building)}${paysPool(building) ? " into your pool" : ""}`
-          : ""),
-    });
-  } else {
-    lines.push({
-      what: `Switched off ${nameOf(turn.cell)} at ${at(turn.cell)}`,
-      why: "switching off is free and immediate — it's how you cut load a grid can't carry",
-    });
-  }
+  lines.push({
+    what: `Fed ${nameOf(turn.cell)} at ${at(turn.cell)}`,
+    why: generationOf(building) > 0
+      ? `it makes ${generationOf(building)}${paysPool(building) ? " into your pool" : ""} against a cost of ${costOf(building)}, and a cascade now starts here`
+      : `your reserve covers its ${costOf(building)} every turn, and a cascade now starts here`,
+  });
 
   lines.push({
     what: `Grid makes ${turn.produced}, draws ${turn.consumed}`,
-    why: "energy flows outward from generators, paying for the dearest tiles it reaches first",
+    why: "energy flows outward from what you've fed, paying for the dearest tiles it reaches first",
   });
 
   if (turn.darkened.length > 0) {
     lines.push({
       what: `${plural(turn.darkened.length, "tile")} went dark`,
-      why: "the wave couldn't reach them — cut load or add generation and they come back",
+      why: "generation ran out before it got there — feed a tile nearer them, or wire in another plant",
     });
   } else if (turn.lit.length > 0) {
     lines.push({
@@ -78,15 +70,15 @@ export function describeTurn(world, turn) {
   if (turn.starvation > 0) {
     lines.push({
       what: `−${turn.starvation} ⚡ starvation`,
-      why: `${colony.population} people, food for ${colony.foodCapacity} — switch a residential off to stop it`,
+      why: `${colony.population} people, food for ${colony.foodCapacity} — it stops when a farm comes online`,
     });
   }
 
   lines.push({
     what: `Energy ${turn.energyBefore} → ${turn.energyAfter}`,
     why: turn.energyAfter === 0
-      ? "empty: any grid that isn't paying for itself goes dark now"
-      : "upkeep first, then what the mines paid back",
+      ? "empty: nothing you've fed can be carried now"
+      : "upkeep on everything you've fed, then what the mines paid back",
   });
 
   return lines;

@@ -1245,6 +1245,51 @@ rise-and-fall works as intended: over-extend on a full reserve and you get
 several turns of grace, the pool drains at a steady visible rate, and when it
 empties the wave retreats to exactly what generation alone can carry.
 
+## Milestone 19 — One move, two budgets
+
+Milestone 18 restored a cascade that only ever travelled between tiles already
+switched on individually — which is not a cascade, it's a wire you light one
+segment at a time. The mistake was in `wiredNeighbours`, which refused to
+propagate into a tile the player hadn't clicked. Clicking the plant in
+`recolonized` therefore lit exactly one tile, which is what it looked like.
+
+**Wiring is a property of the board, not of what's switched on.** Energy now
+spreads to any conducting neighbour and pays its cost. That alone brings the
+cascade back: one tap on a plant lights the run behind it.
+
+**The off-switch is gone, and with it a whole tier of state.** Once the wave
+reaches tiles you never touched, "switched on" can't also mean "not switched
+off", and the fix was heading for a tri-state per tile plus a rule about
+whether an off tile still carries energy. That was more machinery than the game
+is worth. There is now exactly one move — **feed a tile** — and one boolean.
+
+**Two budgets that never mix.** The first attempt let the wave draw on the
+reserve when generation ran short, and it emptied the entire pool on the first
+turn: nothing stops a greedy wave that can spend a stock as though it were an
+income. So:
+
+- Your **reserve** pays the cost of every tile you've fed, every turn, and
+  nothing else.
+- A grid's **generation** pays for the cascade, and nothing else.
+
+A fat reserve can't push a cascade one tile further, and a grid sitting on
+unused surplus can't pay your upkeep. It also makes a fed tile's whole
+generation available to its grid — its own cost came out of the pool — so a fed
+plant hands its grid all 5 and carries exactly five crystals.
+
+**Upkeep is all-or-none, so running out is a cliff.** If the reserve can't
+carry everything you've fed, none of it runs, and that's the loss. Softening it
+would mean the rule choosing which of your tiles matters. The warning isn't the
+moment of failure, it's the pool ticking down toward your upkeep, visible many
+turns ahead — which is the rise-and-fall this was always meant to have.
+
+**What this makes the game about.** Feeding a plant is cheap and buys reach;
+feeding a crystal in a far cluster is a standing bill. A mine reached by a
+cascade is pure profit (its grid pays the 3, it pays 2 to your pool); a mine
+you feed directly costs you 3 to earn 2. So the pressure is always toward
+wiring things up rather than paying for them one at a time — which is topology
+mattering, in the economy rather than as an assertion.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1285,11 +1330,15 @@ empties the wave retreats to exactly what generation alone can carry.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
+| A cascade spreads into tiles the player never touched | Otherwise it isn't a cascade at all — it's a wire lit one segment at a time, which is exactly the bug that made clicking a plant light one tile |
+| There is one move (feed a tile) and no way to switch anything off | The alternative was a tri-state per tile plus a rule about whether an off tile still conducts — more machinery than the game earns |
+| The reserve pays only for tiles you fed; generation pays only for cascades | Letting the wave draw on the reserve emptied the whole pool on turn one: a greedy wave will always spend a stock as if it were an income |
+| A fed tile's full generation goes to its grid | Its own cost came out of the pool, so there's nothing to net off — and "a plant carries five crystals" is a rule you can hold in your head |
+| Upkeep is all-or-none, and failing it is the loss | Softening it means the rule choosing which of your tiles matters; the warning is the pool ticking toward your upkeep, not the moment it arrives |
 | Power flows outward from generators each turn, spending every unit once | Keeps the cascade — the thing the game is actually fun to watch — while making a wide network cost more than a narrow one, which the old duplicating signal never did |
 | Candidates are served dearest-first, a whole cost class at a time | Expensive tiles starving the branch past them is a routing mechanic you can build with; funding a class all-or-none means the engine never picks between equal peers, and with half a board at cost 1 ties are the common case, not a corner |
-| Surplus is tracked per component; only the reserve is shared | A global accumulator let an unwired plant fund a different grid's frontier, which is the topology principle broken by bookkeeping |
-| When the reserve can't cover every grid drawing on it, none of them draw | Same reason as within a cost class — the alternative is the engine deciding which grid matters |
-| Brownout is local: the wave stops short rather than the grid going dark | A frontier tells you *where* you ran out; a blanket blackout only tells you that you did |
+| Surplus is tracked per component | A global accumulator let an unwired plant fund a different grid's frontier, which is the topology principle broken by bookkeeping |
+| Brownout is local: the wave stops short rather than the grid going dark | A frontier tells you *where* generation ran out; a blanket blackout only tells you that it did |
 | Generators need `storage` >= their cost to restart themselves | Energy can't pay for the turn that produces it; without a bank a generator would need re-clicking every turn |
 | Pool-output generation is excluded from its own grid's budget | Keeps the power solve independent of the colony, so there's no circular dependency between them |
 | `applyTurn` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |

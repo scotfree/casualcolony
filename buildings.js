@@ -45,9 +45,9 @@
 //
 // legendChar is the character this type is written as in a level file's grid.
 //
-// Every non-inert tile can be switched off again by clicking it. That used to
-// be residential's special "free cull"; under per-turn power it's the general
-// way you fix a grid you can't afford, so it isn't a per-type flag any more.
+// Nothing here is switchable off. The only move is feeding a tile — putting
+// your reserve behind it so it runs and a cascade starts there — so a building
+// never needs a per-type flag about what clicking it does.
 //
 // shape names the glyph the renderer draws at a tile's center — "plus",
 // "bolt", "person", "leaf", "dollar", "x", or omitted for no icon (desert).

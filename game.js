@@ -31,7 +31,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.22.0";
+const VERSION = "0.23.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -157,7 +157,7 @@ function startRun(level) {
   lastTurn = null;
   // A level may open with tiles already switched on; solve before turn one so
   // the board is showing its real state rather than everything dark.
-  settle(world);
+  settle(world, performance.now());
   refreshVisibility();
   setEditMode(false);
   resize();
@@ -423,9 +423,9 @@ function drawCell(cell, now) {
   ctx.translate(originX + cell.x * cellSize, originY + cell.y * cellSize);
   if (!inSight) ctx.globalAlpha = 0.34; // remembered, not currently in sight
   paintTile(ctx, cellSize, building, t, iconOverrides);
-  // Switched on but dark: the grid can't afford it. Drawn as a hollow marker
-  // so an over-committed component is visibly *your doing* rather than just
-  // absent — it's the feedback that tells you to cut load or add generation.
+  // Fed, but dark: your reserve can no longer carry everything you've fed, so
+  // none of it runs. Drawn as a hollow marker because it's visibly *your
+  // doing* rather than just absent.
   if (cell.enabled && !cell.powered) {
     const pad = Math.max(1, Math.round(cellSize * 0.06));
     ctx.strokeStyle = "#5c4a2a";
@@ -457,7 +457,10 @@ function updateOutcome(now) {
     if (cell.powered && cell.litAt !== null && now < cell.litAt + LIGHT_TIME) return;
   }
   const met = goalProgress() >= world.level.goal.value;
-  const broke = world.energy <= 0 && solvePower(world).dark.size > 0;
+  // You lose when the reserve can no longer carry what you've fed. It's all or
+  // nothing, so that moment is a cliff — but the pool ticking down toward your
+  // upkeep is the whole warning, several turns in advance.
+  const broke = solvePower(world).dark.size > 0;
   if (!met && !broke) return;
   outcome = { result: met ? "win" : "lose", reason: met ? "goal" : "blackout" };
   relayoutOutcome();

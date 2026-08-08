@@ -1,15 +1,15 @@
 // What a click does, and what a turn does. The game's actual rules.
 //
-// A click **toggles a tile on or off** — that's the whole of the player's
-// vocabulary. It's free in itself; you pay for what you *run*, every turn,
-// which is what makes switching something off the way you fix an
-// over-committed grid. (Residential's old "free cull" was a special case of
-// this before everything became toggleable.)
+// A click **feeds a tile** — that's the whole of the player's vocabulary. Your
+// reserve then carries that tile's cost every turn, and a cascade starts from
+// it, spreading as far as the grid's own generation reaches. Nothing can be
+// switched off again, so a click is a commitment, not a toggle.
 //
 // A turn happens whenever a click actually changes the board. Solving it is:
 //
-//   1. work out which components can run (power.js)
-//   2. take their shortfall out of the pool
+//   1. work out what runs — upkeep out of the pool, cascades out of
+//      generation (power.js)
+//   2. take that upkeep out of the pool
 //   3. resolve the colony against whatever came out powered
 //   4. add what the powered mines pay back, take off any starvation
 //
@@ -28,22 +28,24 @@ import { visibleCells } from "./visibility.js";
 export const RIPPLE_STEP = 70;
 
 // What clicking `cell` would do, without doing it. `ok` says whether it would
-// change anything; `reason` on a failure is "inert" (nothing to switch),
+// change anything; `reason` on a failure is "inert" (nothing there to feed),
 // "hidden" (out of sight — see visibility.js) or "noop".
+//
+// There is exactly one move: put your reserve behind a tile, which makes it a
+// place a cascade starts. There's no switching off. Tiles are never "yours" to
+// manage individually — the wave decides what runs, every turn.
 export function resolveTap(world, cell, visible = visibleCells(world)) {
   if (!cell) return { kind: "none", ok: false, reason: "noop" };
 
-  // Fog gates what you can *do*. An enabled cell is always visible (it's zero
-  // steps from itself), so this can never trap you into being unable to switch
-  // off the thing that's draining you.
   if (!visible.has(cell)) return { kind: "none", ok: false, reason: "hidden", cell };
 
   const building = buildingFor(cell);
   if (!building.conducts) return { kind: "none", ok: false, reason: "inert", cell };
 
-  return cell.enabled
-    ? { kind: "disable", ok: true, cell }
-    : { kind: "enable", ok: true, cell };
+  // Nothing to buy: the wave already reaches it, or you've already paid and it
+  // still didn't come up.
+  if (cell.powered || cell.enabled) return { kind: "none", ok: false, reason: "noop", cell };
+  return { kind: "enable", ok: true, cell };
 }
 
 // How far each powered cell is from the nearest generator feeding its grid.
@@ -98,7 +100,7 @@ export function applyTurn(world, tap, now = 0) {
 
   const wasPowered = new Set(world.cells.filter((cell) => cell.powered));
   const energyBefore = world.energy;
-  tap.cell.enabled = tap.kind === "enable";
+  tap.cell.enabled = true;
 
   const solved = solvePower(world, world.energy);
   world.energy -= solved.fromPool;
@@ -146,10 +148,14 @@ export function tap(world, cell, now = 0) {
 
 // Solves the board without a click — used to settle the opening position, so
 // a level that starts with tiles already enabled is powered before turn one.
-export function settle(world) {
+export function settle(world, now = 0) {
   const solved = solvePower(world, world.energy);
+  // Stamp the pulse too, or the opening position renders as powered-but-dark:
+  // litAt is what the tile renderer animates from, and a null reads as unlit.
+  const depths = pulseDepths(world, solved.powered);
   for (const cell of world.cells) {
     cell.powered = solved.powered.has(cell);
+    cell.litAt = cell.powered ? now + depths.get(cell) * RIPPLE_STEP : null;
     if (cell.powered) cell.seen = true;
   }
   return solved;

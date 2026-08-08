@@ -1,32 +1,39 @@
 // How energy flows, and therefore what's powered this turn.
 //
-// Energy propagates *locally*, outward from generators, the way the original
-// cascade did — but conserved. The old model handed each neighbour whatever
-// signal was left over, so a branch duplicated it and a wide network cost no
-// more than a narrow one. Here every unit is spent exactly once.
+// **There is one move: feed a tile.** Your reserve then carries that tile's
+// cost every turn, and the tile becomes a place a cascade starts. Nothing can
+// be switched off — the wave decides what runs, fresh, every turn.
 //
-// **The wave.** Generators that can start themselves (see `selfStarting`)
-// light first and put their surplus into the wave. Each step, the wave looks
-// at every unpowered tile wired to what's already lit and tries to pay for
-// them — and this is the interesting part:
+// **Two budgets that never mix.** The reserve pays for the tiles you fed and
+// nothing else. Generation pays for the cascade and nothing else. That's what
+// keeps the two halves of the game distinct: your pool is a countdown against
+// your own commitments, while how far a cascade reaches is a fact about the
+// board you wired it into. A fat reserve cannot push a cascade one tile
+// further, and a grid sitting on unused surplus cannot pay your upkeep.
+//
+// **The wave.** A fed tile's cost came out of the reserve, so the whole of its
+// generation is free for the cascade — a fed plant hands its grid all 5, not 4,
+// and therefore carries exactly five crystals. Each step, the wave looks at
+// every unpowered tile wired to what's already lit and tries to pay for it out
+// of that grid's remaining generation:
 //
 //   Tiles are served in **descending order of cost**, a whole cost class at a
-//   time. If the wave can afford the entire class it powers all of it; if it
+//   time. If the grid can afford the entire class it powers all of it; if it
 //   can't, it skips that class and tries the next cheaper one.
 //
-// Expensive tiles therefore get first refusal on whatever energy reaches
-// them, and can starve a branch beyond them — which is a routing mechanic you
-// can build with deliberately, not just a limit.
+// Expensive tiles therefore get first refusal on whatever energy reaches them,
+// and can starve a branch beyond them — a routing mechanic you can build with
+// deliberately, not just a limit.
 //
-// **Why whole classes.** Only three distinct costs exist and roughly half of
-// a typical board is cost 1, so ties are the common case, not a corner. Any
+// **Why whole classes.** Only three distinct costs exist and roughly half of a
+// typical board is cost 1, so ties are the common case, not a corner. Any
 // per-tile tiebreak ("top-left wins") would therefore be the rule silently
 // deciding most outcomes — the engine choosing geography, which it must never
 // do. All-or-none within a class removes the question entirely: nothing is
 // ever picked over an equal peer.
 //
-// **The frontier pools its surplus** rather than each tile spending its own.
-// Otherwise a tile bordered by two powered neighbours would be funded by
+// **The frontier pools its grid's surplus** rather than each tile spending its
+// own. Otherwise a tile bordered by two powered neighbours would be funded by
 // whichever the walk happened to visit first, and traversal order would leak
 // into the result.
 //
@@ -35,19 +42,11 @@
 // whole reason topology is worth playing with — an unreachable surplus is a
 // routing problem, not a rounding error.
 //
-// **The reserve tops the wave up, and it's shared.** Whatever a grid's own
-// generation can't cover comes out of the player's pool, which is what makes
-// an over-extended network drain you a little every turn instead of simply
-// refusing to run. Because there's only one reserve, two grids can contend for
-// it — and when it can't cover everyone asking, none of them draw. Same rule
-// as within a cost class, for the same reason: the alternative is the engine
-// choosing which grid matters.
-//
-// **A grid with no generator runs entirely off the reserve, or not at all.**
-// There's no origin inside it for a wave to start from, so there's nothing to
-// spread — it's the one case that isn't a cascade. Whole grid or nothing, and
-// it's settled after the wave so an unaffordable remote cluster fails on its
-// own terms rather than darkening the grid you already had running.
+// **Upkeep is all-or-none.** If the reserve can't carry every tile you've fed,
+// none of them come up. Same reason as within a cost class: the alternative is
+// the rule choosing which of your tiles matters. It makes running out a cliff
+// rather than a slide — but the pool ticking down toward your upkeep is the
+// warning, and it arrives many turns ahead.
 //
 // Pure: reads the world, changes nothing. The caller applies the result.
 
@@ -61,11 +60,14 @@ const AXES = {
   horizontal: [[1, 0], [-1, 0]],
 };
 
-// Two enabled tiles are wired together only if *both* conduct along the axis
-// between them. That symmetry lets parallel runs sit flush without merging —
-// two adjacent columns of red crystal are two grids, not one. It doesn't let
-// runs *cross*: a green tile in a red run breaks it, since one tile has one
-// axis.
+// Two tiles are wired together only if *both* conduct along the axis between
+// them. That symmetry lets parallel runs sit flush without merging — two
+// adjacent columns of red crystal are two grids, not one. It doesn't let runs
+// *cross*: a green tile in a red run breaks it, since one tile has one axis.
+//
+// Wiring is a property of the *board*, not of what you've switched on. A tile
+// doesn't have to be lit to carry energy past itself — that's what makes this
+// a cascade rather than a set of tiles you light one at a time.
 export function wiredNeighbours(world, cell) {
   const axis = AXES[buildingFor(cell).conducts];
   if (!axis) return [];
@@ -76,7 +78,6 @@ export function wiredNeighbours(world, cell) {
     const y = cell.y + dy;
     if (x < 0 || y < 0 || x >= width || y >= height) continue;
     const neighbour = world.cells[y * width + x];
-    if (!neighbour.enabled) continue;
     const theirAxis = AXES[buildingFor(neighbour).conducts];
     if (!theirAxis) continue;
     if (!theirAxis.some(([ndx, ndy]) => ndx === -dx && ndy === -dy)) continue;
@@ -85,14 +86,15 @@ export function wiredNeighbours(world, cell) {
   return out;
 }
 
-// Every connected group of enabled, conducting tiles — one "grid". The solve
-// uses these to keep each grid's generation to itself; it's also what "how
-// many separate grids do I have" means for the log and the tests.
+// Every connected group of conducting tiles — one "grid". Fixed by the level's
+// layout, since wiring doesn't depend on what's switched on. The solve uses
+// these to keep each grid's generation to itself; it's also what "how many
+// separate grids does this board have" means for the log and the tests.
 export function components(world) {
   const seen = new Set();
   const groups = [];
   for (const cell of world.cells) {
-    if (!cell.enabled || seen.has(cell) || !buildingFor(cell).conducts) continue;
+    if (seen.has(cell) || !buildingFor(cell).conducts) continue;
     const group = [];
     let frontier = [cell];
     seen.add(cell);
@@ -116,11 +118,13 @@ export function components(world) {
 // Solves the board for this turn.
 //
 // Returns { powered, dark, produced, consumed, fromPool, poolIncome } —
-// `dark` being tiles the player switched on that the wave couldn't reach.
+// `dark` being tiles you fed that the reserve couldn't carry.
 //
-// Note fromPool is *not* `consumed - produced`: a grid sitting on unused
-// surplus doesn't offset another grid's shortfall, because the two aren't
-// wired together. Only the reserve is shared.
+// Note fromPool is *not* `consumed - produced`. The two budgets never mix: the
+// reserve pays for the tiles you fed and nothing else, and generation pays for
+// the cascade and nothing else. That separation is the whole economy — a grid
+// sitting on unused surplus can't subsidise your reserve, and a fat reserve
+// can't push a cascade one tile further than its generator affords.
 export function solvePower(world, pool = world.energy) {
   const grids = components(world);
   const gridOf = new Map();
@@ -138,27 +142,40 @@ export function solvePower(world, pool = world.energy) {
   let reserve = pool;
   let drawn = 0;      // how much of the reserve this turn actually spends
 
-  // Anything that can bring itself up starts the wave in its own grid.
+  // Every tile you've fed is where a wave starts, and your reserve carries its
+  // cost for as long as it runs. That's the only thing the reserve ever pays
+  // for — feeding a tile is the only move there is.
+  const sources = [];
   grids.forEach((grid, index) => {
     for (const cell of grid) {
-      const building = buildingFor(cell);
-      if (generationOf(building) === 0 || paysPool(building)) continue;
-      if (!selfStarting(building)) continue;
-      powered.add(cell);
-      surplus[index] += generationOf(building) - costOf(building);
-      produced += generationOf(building);
-      consumed += costOf(building);
+      if (!cell.enabled) continue;
+      // A generator with nothing banked can't restart itself, so feeding it
+      // achieves nothing (see selfStarting in buildings.js).
+      if (!selfStarting(buildingFor(cell))) continue;
+      sources.push({ cell, index });
     }
   });
 
-  // A generator that doesn't even cover its own cost leans on the reserve from
-  // the outset, so settle that before anything downstream asks for it.
-  surplus.forEach((value, index) => {
-    if (value >= 0) return;
-    reserve += value;
-    drawn -= value;
-    surplus[index] = 0;
-  });
+  // All of them or none of them: if the reserve can't carry everything you've
+  // fed, nothing comes up rather than the rule choosing which of your tiles
+  // matters. Running out is meant to be a cliff you can see coming.
+  const upkeep = sources.reduce((total, { cell }) => total + costOf(buildingFor(cell)), 0);
+  if (upkeep <= reserve) {
+    reserve -= upkeep;
+    drawn += upkeep;
+    for (const { cell, index } of sources) {
+      const building = buildingFor(cell);
+      powered.add(cell);
+      consumed += costOf(building);
+      // Its cost came out of the reserve, so the whole of its generation is
+      // free for the cascade — a fed plant hands its grid all 5, not 4.
+      if (paysPool(building)) poolIncome += generationOf(building);
+      else {
+        produced += generationOf(building);
+        surplus[index] += generationOf(building);
+      }
+    }
+  }
 
   for (;;) {
     // Everything unpowered that's wired to something lit, filed by cost and
@@ -179,34 +196,14 @@ export function solvePower(world, pool = world.energy) {
 
     let progressed = false;
     for (const cost of [...classes.keys()].sort((a, b) => b - a)) {
-      const byGrid = classes.get(cost);
-
-      // A grid that can pay for its whole share of the class out of its own
-      // generation simply does. The rest are competing for the one reserve.
-      const selfFunded = [];
-      const contested = [];
-      let needed = 0;
-      for (const [index, cells] of byGrid) {
+      for (const [index, cells] of classes.get(cost)) {
+        // Whole cost class or none of it, out of that grid's own generation.
+        // The reserve is not an option here — a cascade reaches exactly as far
+        // as its generators pay for, which is what makes wiring to a plant
+        // worth doing instead of feeding tiles one at a time.
         const total = cost * cells.size;
-        if (total <= surplus[index]) selfFunded.push([index, cells, total]);
-        else {
-          contested.push([index, cells, total]);
-          needed += total - surplus[index];
-        }
-      }
-
-      // All or none, twice over: a whole cost class within a grid, and a whole
-      // set of contenders for the reserve. Anything less would mean picking
-      // between equals, which is the one thing the rule must never do.
-      const funding = needed <= reserve ? selfFunded.concat(contested) : selfFunded;
-      if (funding.length === 0) continue;
-      if (contested.length > 0 && needed <= reserve) {
-        reserve -= needed;
-        drawn += needed;
-      }
-
-      for (const [index, cells, total] of funding) {
-        surplus[index] = Math.max(0, surplus[index] - total);
+        if (total > surplus[index]) continue;
+        surplus[index] -= total;
         for (const cell of cells) {
           const building = buildingFor(cell);
           powered.add(cell);
@@ -217,8 +214,8 @@ export function solvePower(world, pool = world.energy) {
             surplus[index] += generationOf(building);
           }
         }
+        progressed = true;
       }
-      progressed = true;
     }
     // A class skipped this round may become affordable once a generator the
     // wave just reached starts contributing, so keep going while anything
@@ -226,37 +223,9 @@ export function solvePower(world, pool = world.energy) {
     if (!progressed) break;
   }
 
-  // A grid with no generator of its own has no origin for a wave to start
-  // from, so it can't cascade — it runs straight off the reserve, all of it or
-  // none of it. That's what lets you spend banked energy on a cluster you
-  // haven't wired up yet, at the price of paying for every tile of it every
-  // turn. (rules.js lights these at once, for the same reason.)
-  //
-  // Settled *after* the wave, deliberately: switching on a remote cluster you
-  // can't afford should fail on its own terms, not black out the grid you
-  // already had running.
-  const orphans = [];
-  let orphanNeed = 0;
-  grids.forEach((grid, index) => {
-    if (grid.some((cell) => powered.has(cell))) return;
-    const total = grid.reduce((sum, cell) => sum + costOf(buildingFor(cell)), 0);
-    orphans.push([grid, total]);
-    orphanNeed += total;
-  });
-  if (orphans.length > 0 && orphanNeed <= reserve) {
-    reserve -= orphanNeed;
-    drawn += orphanNeed;
-    for (const [grid, total] of orphans) {
-      consumed += total;
-      for (const cell of grid) {
-        const building = buildingFor(cell);
-        powered.add(cell);
-        if (paysPool(building)) poolIncome += generationOf(building);
-        else produced += generationOf(building);
-      }
-    }
-  }
-
+  // Tiles you paid to light that didn't come up — the reserve couldn't cover
+  // the jump-start. Everything else that's unlit is just board the wave hasn't
+  // reached, which isn't a failure and isn't worth flagging.
   const dark = new Set();
   for (const cell of world.cells) {
     if (cell.enabled && buildingFor(cell).conducts && !powered.has(cell)) dark.add(cell);
