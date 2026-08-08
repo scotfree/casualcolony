@@ -112,16 +112,26 @@ function poweredSet(world) {
 
 // --- Power (power.js) --------------------------------------------------------
 //
-// The core of the new model: everything wired together shares one budget, and
-// a grid runs only if the whole of it is affordable.
+// The core of the model: energy flows outward from generators, spending each
+// unit once, and a tile lights only if the wave reaching it can pay for it.
+
+// Letting time pass, with the board left alone. A click is the only clock, and
+// every click the input layer can produce is also a move — so to watch a grid
+// simply *run* we hand applyTurn a tap that switches an already-off tile off.
+// It's a full turn through the real machinery; it just has nothing to change.
+function passTurns(world, count, x = world.level.width - 1, y = 0) {
+  const cell = cellAt(world, x, y);
+  for (let i = 0; i < count; i++) {
+    applyTurn(world, { kind: "disable", ok: true, cell });
+  }
+}
 
 test("a lone plant pays for itself and stays powered, turn after turn", () => {
   const world = build(["P........."], { energyBudget: 5 });
   tap(world, cellAt(world, 0, 0));
   assertEqual(litCount(world), 1, "switched on");
   assertEqual(world.energy, 5, "and cost the pool nothing — it generates more than it draws");
-  // Clicks on desert are no-ops, so this is just "time passing".
-  for (let i = 0; i < 5; i++) tap(world, cellAt(world, 9, 0));
+  passTurns(world, 5);
   assertEqual(litCount(world), 1, "still powered with no further input");
   assertEqual(world.energy, 5, "and still free");
 });
@@ -145,35 +155,77 @@ test("generation is conserved: a plant carries a fixed total load, not a radius"
   for (let i = 1; i <= 4; i++) tap(world, cellAt(world, i, 0));
   assertEqual(litCount(world), 5, "plant (cost 1, makes 5) carries 4 crystals");
   tap(world, cellAt(world, 5, 0));
-  assertEqual(litCount(world), 0, "one more tips the grid over and the whole thing browns out");
+  assertEqual(litCount(world), 5, "one more and the wave simply stops short of it");
+  assertEqual(
+    world.cells.filter((c) => c.enabled && !c.powered).length, 1,
+    "the tile past the end of the energy is the one that goes without"
+  );
 });
 
-test("brownout is all-or-nothing, so the game never picks which tiles to drop", () => {
-  const world = build(["PCCCCCC..."], { energyBudget: 0 });
-  for (let i = 0; i <= 5; i++) tap(world, cellAt(world, i, 0));
-  const dark = world.cells.filter((c) => c.enabled && !c.powered);
-  assertEqual(dark.length, 6, "every enabled tile in the component is dark, not some of them");
-});
-
-test("the pool funds a shortfall, and the grid dies when it runs out", () => {
-  // The rise-and-fall: a deficit is survivable exactly as long as your reserve.
-  const world = build(["PCCCCC...."], { energyBudget: 4 });
-  for (let i = 0; i <= 5; i++) tap(world, cellAt(world, i, 0));
-  assertEqual(litCount(world), 6, "running on the pool");
-  const drain = [];
-  for (let t = 0; t < 4; t++) {
-    tap(world, cellAt(world, 9, 0));   // no-op click: doesn't advance a turn
-    tap(world, cellAt(world, 8, 0));
-    drain.push(world.energy);
+test("within a cost class it's all or none, so the game never picks between equals", () => {
+  // Three crystals equidistant from one plant. Ties are the common case, not a
+  // corner, so any "top-left wins" fallback would be the rule quietly deciding
+  // most boards.
+  const easy = build([".C.", "CPC"], { energyBudget: 0 });
+  for (const cell of easy.cells.filter((c) => c.type !== "desert")) {
+    tap(easy, cellAt(easy, cell.x, cell.y));
   }
-  assert(world.energy < 4, `pool should be draining, got ${drain.join(",")}`);
+  assertEqual(litCount(easy), 4, "surplus 4 covers all three");
+
+  const tight = build([".C.", "CPC"], { energyBudget: 0 });
+  const saved = BUILDINGS.powerPlant.generation;
+  try {
+    BUILDINGS.powerPlant.generation = 3; // surplus 2 — enough for two of the three
+    for (const cell of tight.cells.filter((c) => c.type !== "desert")) {
+      tap(tight, cellAt(tight, cell.x, cell.y));
+    }
+    assertEqual(litCount(tight), 1, "and none of them light rather than an arbitrary two");
+  } finally {
+    BUILDINGS.powerPlant.generation = saved;
+  }
 });
 
-test("two grids are independent — one browning out doesn't touch the other", () => {
-  const world = build(["PCC.PC"], { energyBudget: 0 });
-  for (const x of [0, 1, 2, 4, 5]) tap(world, cellAt(world, x, 0));
+test("the dearest tiles reached get first refusal, and can starve what's past them", () => {
+  // Both hang off the same plant's surplus of 4. The mine costs 3 and is served
+  // first; the residential needs 2 and only 1 is left.
+  const world = build([".M..", ".PH."], { energyBudget: 0 });
+  for (const [x, y] of [[1, 0], [1, 1], [2, 1]]) tap(world, cellAt(world, x, y));
+  const powered = [...poweredSet(world)].map((c) => c.type).sort();
+  assertEqual(powered, ["mine", "powerPlant"], "the mine takes the energy first");
+});
+
+test("the reserve carries a deficit for a while, then the wave retreats", () => {
+  // The rise-and-fall levels are built on: over-extend and you buy turns, not
+  // an instant refusal.
+  const world = build(["PCCCCCCC.."], { energyBudget: 9 });
+  for (let x = 0; x <= 7; x++) tap(world, cellAt(world, x, 0));
+  assertEqual(litCount(world), 8, "all eight running, on the reserve");
+  assert(world.energy < 9, "which is already costing you");
+  passTurns(world, 4);
+  assertEqual(world.energy, 0, "the reserve empties");
+  assertEqual(litCount(world), 5, "and the wave falls back to what the plant alone can carry");
+});
+
+test("generation stays inside its own grid", () => {
+  // The plant has 4 spare and the crystals need 3, but nothing is wired
+  // between them — so the surplus is stranded. This is the whole reason
+  // topology is worth playing with.
+  const world = build(["P.CCC"], { energyBudget: 0 });
+  for (const x of [0, 2, 3, 4]) tap(world, cellAt(world, x, 0));
   assertEqual(components(world).length, 2, "the desert splits them");
-  assertEqual(litCount(world), 5, "both affordable");
+  assertEqual(litCount(world), 1, "spare energy can't jump the gap");
+});
+
+test("when the reserve can't cover every grid asking, none of them draw on it", () => {
+  // Two identical grids sitting exactly at break-even, each with one more
+  // crystal enabled that only the reserve could pay for.
+  const world = build(["PCCCCC.PCCCCC"], { energyBudget: 0 });
+  for (const x of [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]) tap(world, cellAt(world, x, 0));
+  assertEqual(solvePower(world, 0).powered.size, 10, "nothing spare: both stop at break-even");
+  assertEqual(solvePower(world, 1).powered.size, 10, "enough for one of them, so neither");
+  const both = solvePower(world, 2);
+  assertEqual(both.powered.size, 12, "enough for both, so both");
+  assertEqual(both.fromPool, 2, "and the reserve pays exactly the two it owes");
 });
 
 test("adjacent red columns stay separate grids — packing without a gap", () => {
@@ -193,13 +245,20 @@ test("a crossing axis breaks a run rather than bridging it", () => {
   assertEqual(components(world).map((g) => g.length).sort(), [1, 1, 3], "the green row cuts the red run");
 });
 
-test("switching a tile off is free and immediate", () => {
-  const world = build(["PCCCCCC..."], { energyBudget: 0 });
-  for (let i = 0; i <= 5; i++) tap(world, cellAt(world, i, 0));
-  assertEqual(litCount(world), 0, "over budget");
-  tap(world, cellAt(world, 5, 0)); // switch the last one back off
-  assertEqual(litCount(world), 5, "cutting load brings the grid straight back");
-  assertEqual(world.energy, 0, "and cost nothing to do");
+test("switching a tile off is free, and stops the bleeding the same turn", () => {
+  // Seven tiles on a plant that funds five: the reserve covers the other two,
+  // and cutting them is the whole repair — no cost, no delay.
+  const world = build(["PCCCCCC..."], { energyBudget: 6 });
+  for (let i = 0; i <= 6; i++) tap(world, cellAt(world, i, 0));
+  assertEqual(litCount(world), 7, "all seven, two of them on the reserve");
+  assert(world.energy < 6, "which has been draining");
+
+  tap(world, cellAt(world, 6, 0));
+  tap(world, cellAt(world, 5, 0));
+  assertEqual(litCount(world), 5, "back to what the plant funds by itself");
+  const settled = world.energy;
+  passTurns(world, 3);
+  assertEqual(world.energy, settled, "and the drain stops dead — switching off costs nothing");
 });
 
 // --- Colony (residential / farm / mine) --------------------------------------
@@ -241,10 +300,13 @@ test("a mine's output never counts toward its own grid's budget", () => {
   tap(world, cellAt(world, 0, 0));
   tap(world, cellAt(world, 1, 0));
   assertEqual(litCount(world), 2, "plant makes 5, plant+mine cost 4 — just affordable");
-  tap(world, cellAt(world, 1, 0));
-  const solo = build(["PMM"], { energyBudget: 0 });
-  for (const x of [0, 1, 2]) tap(solo, cellAt(solo, x, 0));
-  assertEqual(litCount(solo), 0, "two mines cost 7 against 5 — the pool income can't help");
+  const pair = build(["PMM"], { energyBudget: 0 });
+  for (const x of [0, 1, 2]) tap(pair, cellAt(pair, x, 0));
+  assertEqual(litCount(pair), 2, "the second mine costs 3 against 1 left, so the wave stops");
+  assert(
+    !cellAt(pair, 2, 0).powered,
+    "and what the pair would have paid into the pool never enters the grid's sums"
+  );
 });
 
 // --- Rules (resolveTap / applyTurn) ------------------------------------------

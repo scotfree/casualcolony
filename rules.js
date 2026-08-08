@@ -101,7 +101,7 @@ export function applyTurn(world, tap, now = 0) {
   tap.cell.enabled = tap.kind === "enable";
 
   const solved = solvePower(world, world.energy);
-  world.energy -= solved.shortfall;
+  world.energy -= solved.fromPool;
 
   const colony = resolveColony(world, solved.powered);
   const income = poolIncome(world, solved.powered, colony);
@@ -125,14 +125,15 @@ export function applyTurn(world, tap, now = 0) {
     cell: tap.cell,
     energyBefore,
     energyAfter: world.energy,
-    shortfall: solved.shortfall,
+    fromPool: solved.fromPool,
+    produced: solved.produced,
+    consumed: solved.consumed,
     income,
     starvation,
     lit: [...solved.powered].filter((c) => !wasPowered.has(c)),
     darkened: [...wasPowered].filter((c) => !solved.powered.has(c)),
     dark: solved.dark,
     colony,
-    groups: solved.groups,
   };
 }
 

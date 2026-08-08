@@ -35,6 +35,7 @@
     --b-res-fill: #131f2c;      --b-res-line: #2c5170;      --b-res-active: #1c3245;      --b-res-glow: #0ea5e9;      --b-res-icon: #38bdf8;
     --b-farm-fill: #131f16;     --b-farm-line: #29572f;     --b-farm-active: #1c3922;     --b-farm-glow: #22c55e;     --b-farm-icon: #4ade80;
     --b-mine-fill: #24141a;     --b-mine-line: #5c2a34;     --b-mine-active: #3a1e26;     --b-mine-glow: #ef4444;     --b-mine-icon: #f87171;
+    --b-drain-fill: #241c2c;    --b-drain-line: #3c2d47;    --b-drain-active: #372a45;    --b-drain-glow: #c084fc;    --b-drain-icon: #a855f7;
 
     --font-display: "Futura", "Century Gothic", "Avenir Next", "Segoe UI Semibold", "Segoe UI", sans-serif;
     --font-body: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
@@ -293,6 +294,11 @@
   .tile--res     { --active: var(--b-res-active);     --glow: var(--b-res-glow);     --icon: var(--b-res-icon);     background: var(--b-res-fill);     border-color: var(--b-res-line); }
   .tile--farm    { --active: var(--b-farm-active);    --glow: var(--b-farm-glow);    --icon: var(--b-farm-icon);    background: var(--b-farm-fill);    border-color: var(--b-farm-line); }
   .tile--mine    { --active: var(--b-mine-active);    --glow: var(--b-mine-glow);    --icon: var(--b-mine-icon);    background: var(--b-mine-fill);    border-color: var(--b-mine-line); }
+  .tile--drain   { --active: var(--b-drain-active);   --glow: var(--b-drain-glow);   --icon: var(--b-drain-icon);   background: var(--b-drain-fill);   border-color: var(--b-drain-line); }
+  /* Switched on, but the energy didn't reach it — the game draws this as a
+     dashed outline, and it's the single most useful piece of feedback on the
+     board. */
+  .tile.waiting { border-style: dashed; border-width: 2px; border-color: var(--glow); opacity: 0.72; }
 
   .tile[data-badge]::after {
     content: attr(data-badge);
@@ -432,7 +438,9 @@
     font-size: 0.85rem;
     display: flex; align-items: center; justify-content: center;
   }
-  ol.steps li strong { display: block; margin-bottom: 2px; }
+  /* Only the step's opening phrase is a heading; emphasis mid-sentence stays
+     inline, or every bolded word would break the line. */
+  ol.steps li > strong:first-child { display: block; margin-bottom: 2px; }
 
   /* Open questions */
   details.q {
@@ -602,14 +610,21 @@
     <div class="eyebrow"><span class="num">§1</span> Overview</div>
     <h2 class="h">What is this?</h2>
     <p class="lede prose">
-      Casual Colony is a tap-driven puzzle about a signal network that, this
-      version, has a small colony living inside it. There is no clock — every
-      tap is a turn, and turns are the only kind of time the game keeps. You
-      light connected crystals by spending a limited energy budget, keep a
-      population of colonists fed on what your farms grow, and let mines turn
-      a well-fed colony into more energy to spend. A run ends when the energy
-      runs out, or when nothing left on the board would do anything if you
-      tapped it — whichever comes first.
+      Casual Colony is a tap-driven puzzle about running a power grid that has
+      a small colony living inside it. There is no clock — every tap is a
+      turn, and turns are the only kind of time the game keeps. You wire tiles
+      together, and every turn energy flows out from your generators and pays
+      to keep them running. Keep a population fed on what your farms grow, and
+      mines turn a fed colony back into energy. You win by having enough of
+      the board <em>running at once</em>; you lose when your reserve empties
+      with tiles you can't power.
+    </p>
+    <p class="prose">
+      The important thing to get used to first: <strong>a tap doesn't light a
+      tile, it switches one on.</strong> Whether it actually runs is decided
+      fresh every turn by whether the energy reaching it can pay for it. You
+      are not buying tiles — you are committing to an upkeep, and the whole
+      game is about whether your grid can carry what you've committed to.
     </p>
   </section>
 
@@ -617,112 +632,77 @@
 
   <section id="quick-start">
     <div class="eyebrow"><span class="num">§2</span> Quick Start</div>
-    <h2 class="h">Playing "Recolonized" — your first seven taps</h2>
+    <h2 class="h">Four taps that teach the whole model</h2>
     <p class="prose">
-      <em>Recolonized</em> is the level built to walk you through every new
-      system at once. It starts you with a tight <strong>7 energy</strong>
-      and an unlit board split into two halves: a small colony up top, and a
-      crystal network waiting below. Tap the numbered tiles below in order —
-      badges <strong>1–7</strong> — and you'll see one tap light an entire
-      network, mining income arrive, and exactly why the order alternates,
-      all in your first seven taps.
+      Open any level with a power plant and try this. It takes about a minute
+      and it's most of what you need to know.
     </p>
-
-    <div class="panel">
-      <div class="panel-cap">Fig. 1 — Recolonized, starting layout</div>
-      <div class="scroller">
-        <div class="board" role="img" aria-label="8 by 12 board. Row 1: three residential tiles at columns 3 to 5, numbered 2, 4, 6, and an unnumbered trap tile at column 6. Row 3: three mines at columns 3 to 5, numbered 3, 5, 7. Row 5: three unnumbered farms at columns 3 to 5, connected to a crystal spine below them. Row 7: a power plant at column 4, numbered 1. Rows 8 to 10: an 8-cell crystal ring, all connected to the power plant. All other tiles are empty desert.">
-          <!-- row 0: desert desert RES RES RES trap desert desert -->
-          <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--res" data-badge="2" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
-          <div class="tile tile--res" data-badge="4" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
-          <div class="tile tile--res" data-badge="6" style="--accent-badge:#38bdf8"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
-          <div class="tile tile--res" data-badge="?"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
-          <div class="tile"></div><div class="tile"></div>
-          <!-- row 1: all desert -->
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 2: desert desert MINE MINE MINE desert desert desert -->
-          <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--mine" data-badge="3" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile tile--mine" data-badge="5" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile tile--mine" data-badge="7" style="--accent-badge:#f87171"><div class="tile-icon is-text">$</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 3: all desert -->
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 4: desert desert FARM FARM FARM desert desert desert (lit for free by the plant) -->
-          <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile tile--farm"><div class="tile-icon"><div class="leaf"></div></div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 5: desert desert CRYSTAL CRYSTAL CRYSTAL desert desert desert -->
-          <div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 6: desert desert desert PLANT desert x4 -->
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <div class="tile tile--plant" data-badge="1" style="--accent-badge:#fbbf24"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 7: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
-          <div class="tile"></div>
-          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 8: desert CRYSTAL desert CRYSTAL desert x4 -->
-          <div class="tile"></div>
-          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile"></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 9: desert CRYSTAL CRYSTAL CRYSTAL desert x4 -->
-          <div class="tile"></div>
-          <div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <!-- row 10, 11: all desert -->
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-          <div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div>
-        </div>
-      </div>
-      <div class="panel-note">1 Power Plant · 2, 4, 6 Residential · 3, 5, 7 Mine · <strong>?</strong> optional trap, see below — farms and the crystal network below them light for free the moment you tap the plant — tap the <strong>Legend</strong> button any time for the full tile key</div>
-    </div>
 
     <ol class="steps">
-      <li><strong>Power Plant first (1).</strong> Costs 1 energy, and lights all 15 cells of the network in one cascade — the crystal spine, all three farms, and the entire ring below. Food capacity is now 3; population is still 0.</li>
-      <li><strong>Residential, then a mine (2, 3).</strong> Tap a residential tile first (2 energy) to seed one resident — then a mine (3 energy). A mine only pays out once someone's there to work it, so tapping it right after that first resident earns income immediately.</li>
-      <li><strong>Repeat twice more (4–7).</strong> Residential, mine, residential, mine — each mine keeps paying out because a resident is always already in place before you tap it. Population climbs to 3, exactly matching capacity, fed the entire way.</li>
+      <li><strong>Switch on the power plant.</strong> It makes 5 energy a turn
+        and costs 1 to run, so it has <strong>4 spare</strong> — and that 4 is
+        the only budget the tiles wired to it get.</li>
+      <li><strong>Switch on a crystal next to it.</strong> Energy flows out
+        from the plant and pays the crystal's cost of 1. Now 3 spare.</li>
+      <li><strong>Keep going until the fifth crystal.</strong> The first four
+        light. The fifth doesn't: there's nothing left to pay it. It sits
+        there with a <strong>dashed outline</strong> — switched on, but not
+        running.</li>
+      <li><strong>Tap that fifth crystal again to switch it off.</strong> Free,
+        instant, and it's the main repair tool in the game.</li>
     </ol>
 
-    <div class="callout">
-      <div class="cap">Order matters</div>
-      <p>
-        A mine only earns energy once the colony has <strong>both</strong>
-        food capacity <em>and</em> at least one resident to work it — being
-        "fed" at population 0 doesn't count. Try tapping all three
-        residential tiles first, then the mines: you'll run out of energy
-        before affording even the first mine. Try the opposite — all three
-        mines first, then residential: those mines pay out nothing (nobody's
-        there yet), and you'll run out before affording a single resident.
-        Only alternating keeps income arriving in time to pay for what comes
-        next.
-      </p>
+    <div class="panel">
+      <div class="panel-cap">Fig. 1 — One plant's surplus of 4, spent along a run</div>
+      <div class="scroller">
+        <div class="chain">
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">makes 5<br />costs 1</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">3 left</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">2 left</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">1 left</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">0 left</div></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-step"><div class="tile tile--crystal waiting"><div class="tile-icon is-text">+</div></div><div class="val">switched on,<br />not running</div></div>
+        </div>
+      </div>
+      <div class="panel-note">Every one of these costs <strong>1 every turn</strong>, not once. The plant isn't paying a one-off price for four crystals — it's carrying them, forever, and it can carry exactly four.</div>
     </div>
 
     <div class="callout">
-      <div class="cap">Try this</div>
+      <div class="cap">Now over-commit on purpose</div>
       <p>
-        There's a fourth residential tile on the board — the one marked
-        <strong>?</strong> — that was never part of the sequence above. Tap
-        it (2 energy): population rises to 4 against only 3 food, and the
-        colony starts starving. The HUD's population readout turns red and
-        energy begins draining. Tap that same tile a <em>second</em> time —
-        an already-active residential tile deactivates instead of lighting
-        again — and the colony is fed again immediately, for free.
+        Switch that fifth crystal back on while you still have energy in
+        reserve. It <em>does</em> light — your reserve is covering it. Watch
+        the ⚡ counter: it drops by 1 every single turn now. Add a sixth and
+        it drops by 2. You've bought running tiles with a countdown, and when
+        the reserve hits zero the extra tiles go dark on their own and you're
+        back to four. Nothing is destroyed; the grid just shrinks to what it
+        can actually afford.
       </p>
     </div>
 
     <p class="prose">
-      Played in the order above, you'll finish with more energy than you
-      started with — that's normal for a colony earning more than it
-      spends. See exactly how a run like that actually ends in
-      <a href="#ending">§3, How a Run Ends</a>.
+      That's the shape of every interesting position in the game: a deficit
+      you can see coming, and a limited number of turns to fix it — by cutting
+      load, or by getting a mine running to refill the reserve before it
+      empties.
     </p>
+
+    <div class="callout">
+      <div class="cap">The one that surprises people</div>
+      <p>
+        Put an expensive tile right next to the plant — a mine (3) or a drain
+        (4) — with a run of crystals behind it. The expensive tile is served
+        <strong>first</strong>, and the crystals behind it get nothing. Energy
+        pays the dearest tiles it reaches before it moves on, so
+        <em>where</em> you put your loads matters as much as how many you
+        have. Move the mine to the far end of the run and everything lights.
+      </p>
+    </div>
   </section>
 
   <hr class="rule" />
@@ -731,87 +711,127 @@
     <div class="eyebrow"><span class="num">§3</span> Mechanics</div>
     <h2 class="h">How everything works</h2>
 
-    <h3 class="h">The board and your energy</h3>
+    <h3 class="h">Two states: switched on, and running</h3>
     <p class="prose">
-      Every level is a grid of tiles and a fixed <strong>energy
-      budget</strong>. Every building type has its own <strong>activation
-      cost</strong> — crystal and the power plant are cheap (1), residential
-      and farm cost 2, a mine costs 3 — and tapping a tile that isn't already
-      active spends that tile's own cost directly out of your energy pool.
-      Can't afford it, can't tap it. Tapping desert, an already-lit tile, or
-      anything that wouldn't change the board is always free. There's no
-      timer and nothing moves on its own between taps; the board is exactly
-      as patient as you are.
+      Every tile you can interact with has an on/off switch, and tapping it
+      flips that switch. That's the entire vocabulary — there is no other kind
+      of move. Switching on and switching off are both free.
+    </p>
+    <p class="prose">
+      What a tile <em>costs</em> is upkeep: crystals 1, residential and farm
+      2, a mine 3, a drain 4 — <strong>every turn it runs</strong>, not once.
+      So after every tap the game re-solves the whole board from scratch and
+      asks, tile by tile, whether the energy reaching it can pay for it. A
+      tile that's switched on but couldn't be paid for is drawn with a
+      <strong>dashed outline</strong>. It isn't broken and it hasn't cost you
+      anything — it's waiting, and it'll come on by itself the moment you free
+      up energy or add generation.
     </p>
 
-    <h3 class="h">Cascades: signal, activation cost, and boost</h3>
+    <h3 class="h">How energy travels</h3>
     <p class="prose">
-      A tap hands the tapped tile signal exactly equal to its own activation
-      cost — enough to cover itself, with nothing left over unless that tile
-      also adds a boost. Each tile that activates hands whatever signal is
-      left, minus the next tile's cost, onward to its neighbors. Crystal is
-      cheap (cost 1), so a plain crystal has just enough signal to light
-      itself and nothing more. A <strong>power plant</strong> is different:
-      it adds a boost (5, by default) to whatever signal passes through it,
-      which is what lets one tap ripple across a whole cluster — and far
-      enough to spill into pricier tiles beyond it. That's the one place
-      energy and signal meet: a direct tap spends real energy equal to the
-      tapped tile's own cost, and everything the resulting cascade reaches
-      <em>beyond</em> that tile is free, paid for by the network's own
-      signal, never your energy pool.
+      Energy starts at your generators and flows outward through connected
+      tiles, paying each one's cost as it reaches it. Every unit is spent
+      exactly once, so a wide network genuinely costs more than a narrow one —
+      splitting a run in two doesn't get you two runs' worth of energy.
+    </p>
+    <p class="prose">
+      A power plant makes 5 and costs 1, so it has <strong>4 spare</strong>:
+      four crystals, or two farms, or one mine and one crystal. That's the
+      number to keep in your head.
     </p>
 
     <div class="panel">
-      <div class="panel-cap">Fig. 2 — Signal decay from a power plant (boost 5, crystal cost 1)</div>
+      <div class="panel-cap">Fig. 2 — The dearest tiles reached are served first</div>
       <div class="scroller">
         <div class="chain">
-          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">tap → 5 out</div></div>
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">4 spare</div></div>
           <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">4 out</div></div>
+          <div class="chain-step"><div class="tile tile--mine active"><div class="tile-icon is-text">$</div></div><div class="val">takes 3</div></div>
           <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">3 out</div></div>
+          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">takes 1</div></div>
           <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">2 out</div></div>
-          <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">1 out</div></div>
-          <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">0 — stops</div></div>
+          <div class="chain-step"><div class="tile tile--crystal waiting"><div class="tile-icon is-text">+</div></div><div class="val">nothing left</div></div>
         </div>
       </div>
-      <div class="panel-note">A lone crystal, tapped directly: signal 1, minus its own cost of 1, plus no boost — <strong>1 − 1 + 0 = 0</strong> — it lights itself and nothing further.</div>
+      <div class="panel-note">Swap the mine for a <strong>residential</strong> (cost 2) and the result changes completely: the mine's 3 leaves 1, which a crystal can use — but a residential's 2 leaves 1, which a residential can't. The tile that gets starved isn't always the dearest one; it's whatever the leftovers don't fit.</div>
     </div>
 
     <p class="prose">
-      Red and green crystal behave exactly like plain crystal, but only
-      spread along one axis each — red north/south, green east/west — so a
-      level's crystal color isn't cosmetic, it's a constraint on which
-      direction a cluster can grow.
+      Two consequences worth building around:
+    </p>
+    <ul>
+      <li><strong>Placement matters, not just totals.</strong> An expensive
+        tile near a generator can starve a whole cheap run behind it. Put your
+        loads at the far end and the same tiles all fit.</li>
+      <li><strong>Ties are never broken.</strong> If several equally-priced
+        tiles are all reached at once and there isn't enough for all of them,
+        <em>none</em> of them light. The game will not pick a winner by
+        position, ever — so a symmetric layout stays symmetric.</li>
+    </ul>
+
+    <h3 class="h">Wiring, and what counts as one grid</h3>
+    <p class="prose">
+      Tiles are connected if they're orthogonally adjacent, both switched on,
+      and both carry the direction between them. Plain crystal, plants and
+      colony buildings connect all four ways. <strong>Red crystal connects
+      only north/south</strong> and <strong>green only east/west</strong>.
+    </p>
+    <p class="prose">
+      What that buys you is <strong>parallel runs with no gap between
+      them</strong>: a 2×2 block of red crystal is two independent columns
+      sitting flush, where plain crystal would merge into one blob. It does
+      <em>not</em> let two runs cross — a green tile lying across a red run
+      breaks it, because that tile only carries one axis.
+    </p>
+    <p class="prose">
+      Each connected grid spends its own generation. A plant's spare energy
+      cannot reach a grid it isn't wired to, however close it looks on screen.
     </p>
 
-    <h3 class="h">Drain — the tile that costs you progress</h3>
+    <h3 class="h">Your reserve, and running a deficit</h3>
     <p class="prose">
-      A <strong>drain</strong> tile never lights up itself. It deactivates
-      every currently-lit tile orthogonally next to it, and it fires two
-      ways: tapped directly (costs energy, only if there's something to
-      clear), or <em>reactively</em>, the instant any cascade lights a tile
-      next to it — for free, the same tick. A tile beside a drain effectively
-      can't stay lit.
+      The ⚡ number in the HUD is your <strong>reserve</strong>. Whatever a
+      grid's own generation can't cover comes out of it, every turn. That's
+      what lets you deliberately run more than you can afford: over-commit
+      with a full reserve and everything runs, the counter ticks down by the
+      size of the deficit, and you have exactly that many turns to fix it.
+    </p>
+    <p class="prose">
+      When the reserve empties, nothing is destroyed — the wave simply
+      retreats to whatever generation alone can carry, and the rest goes
+      dashed. You lose only if you're out of reserve <em>and</em> still have
+      tiles you can't power.
+    </p>
+    <div class="callout">
+      <div class="cap">One reserve, shared</div>
+      <p>
+        There's only one reserve for the whole board, so separate grids
+        compete for it. If it can't cover everything drawing on it, none of
+        them draw — the same "no arbitrary winners" rule as within a run.
+      </p>
+    </div>
+    <p class="prose">
+      A grid with <strong>no generator at all</strong> is the one thing that
+      doesn't cascade: there's no origin for energy to flow out from, so it
+      runs entirely off your reserve, all of it or none of it. That's how you
+      light a cluster you haven't wired up yet — at the price of paying for
+      every tile of it, every turn.
+    </p>
+
+    <h3 class="h">Drain — the tile that just costs</h3>
+    <p class="prose">
+      A <strong>drain</strong> costs 4 a turn and gives nothing back — exactly
+      a power plant's entire surplus. It's still wire, so energy passes
+      through it, which makes it a very effective plug in the middle of a run.
+      Switching it off is free, and often the whole answer.
     </p>
 
     <h3 class="h">The colony economy</h3>
     <p class="prose">
-      Residential, farm, and mine tiles activate the same way crystals do —
-      a strong enough crystal chain can spill into one of them — but they're
-      pricier to switch on: cost 2 for residential and farm, cost 3 for a
-      mine, against a crystal's cost of 1. A mine in particular acts as a
-      signal sink: reachable from a well-boosted network, but it eats most
-      of whatever signal is left, so propagation rarely survives past one.
-      Tapping one directly costs that same amount out of your <strong>energy
-      pool</strong> — 2 for residential or farm, 3 for a mine — so unlike a
-      crystal, these tiles can be too expensive to jump-start until you've
-      built up enough energy to afford them (mining income, once it's
-      flowing, is usually what makes that possible). Once active, they feed
-      a second system, recomputed fresh from the board after every tap:
+      Residential, farm and mine tiles wire up like anything else; they just
+      cost more (2, 2 and 3). Once running they feed a second system,
+      recomputed from the board every turn:
     </p>
 
     <div class="panel">
@@ -842,117 +862,115 @@
       <div class="flow" style="margin-top:18px">
         <div class="branch">
           <div class="outcome-pill fed">0 &lt; population ≤ capacity → <strong>fed</strong></div>
-          <div class="panel-note" style="margin:0">+ mineYield energy per active mine</div>
+          <div class="panel-note" style="margin:0">every running mine pays +2 into your reserve</div>
         </div>
         <div class="flow-arrow" style="visibility:hidden">→</div>
         <div class="branch">
           <div class="outcome-pill starve">population &gt; capacity → <strong>starving</strong></div>
-          <div class="panel-note" style="margin:0">− starvationPenalty energy per person over capacity</div>
+          <div class="panel-note" style="margin:0">− 1 energy per person over capacity, every turn</div>
         </div>
       </div>
     </div>
 
     <p class="prose">
       Mines only pay out while the colony is fed <strong>and has at least one
-      resident</strong> — a colony of zero is trivially "fed" against any
-      food capacity, but there's nobody there to work a mine, so it earns
-      nothing until someone moves in. A starving colony's mines also sit
-      idle, and the shortfall bleeds energy instead. That drain is what
-      you're avoiding by managing population yourself, tile by tile.
+      resident</strong> — a colony of zero is trivially "fed" against any food
+      capacity, but there's nobody there to work a mine. A starving colony's
+      mines sit idle too, and the shortfall bleeds energy on top.
+    </p>
+    <p class="prose">
+      A mine is the only thing that pays into your <em>reserve</em> rather
+      than back into its own grid. That's deliberate: it means a mine never
+      helps power the grid it's standing in — that grid has to carry its cost
+      of 3 out of its own generation — and it's why mines are the only way to
+      refill what you spend.
     </p>
 
-    <h3 class="h">Free culling</h3>
+    <h3 class="h">Switching things off</h3>
     <p class="prose">
-      Residential is the one building you can turn back off: tap an
-      already-active residential tile and it deactivates, dropping
-      population by one. It's the <strong>only free action in the game</strong>
-      — no energy cost, and it works even at 0 energy — because it's the
-      player's own tool for fixing a starving colony, rather than the game
-      quietly picking who starves. A paid or blocked cull could leave a
-      starving colony with no way back; a free one never can.
+      Every non-desert tile can be switched back off, free and immediately.
+      It's the general repair: too much load, cut some; colony starving, cut a
+      residential; a drain eating your surplus, cut it. Because it's free and
+      always available, no position is ever unrecoverable for want of energy
+      to escape it.
     </p>
 
     <h3 class="h">Fog — what you can see, and therefore do</h3>
     <p class="prose">
       Some levels are fogged. On those, you can only see a short distance
-      around anything that's activated — and <strong>you can only tap what
-      you can see.</strong> A tile in the dark isn't an expensive move,
-      it's not a move at all; tapping it does nothing. Lighting something up
-      extends your sight from there, so the board unfolds as you work
-      outward. <em>Recolonized</em> uses a fog distance of 2.
+      around anything that's <em>running</em> — and <strong>you can only tap
+      what you can see.</strong> A tile in the dark isn't an expensive move,
+      it's not a move at all; tapping it does nothing. Getting something
+      running extends your sight from there, so the board unfolds as you work
+      outward.
     </p>
     <p class="prose">
-      Sight behaves nothing like a cascade, on purpose. A cascade travels
-      only through connected tiles and pays each one's activation cost; fog
-      is a plain distance that <strong>ignores terrain entirely and crosses
-      desert freely</strong>. So fog often shows you a cluster your network
-      can't reach — which is exactly the hint that it's worth spending a
-      direct tap over there. Once you've seen a tile it stays on screen,
-      dimmed, even if it falls back into the dark: fog never makes you
-      re-learn a board you've already explored, it just stops you acting at
-      a distance.
+      Sight behaves nothing like the flow of energy, on purpose. Energy
+      travels only through connected tiles and pays each one's cost; fog is a
+      plain distance that <strong>ignores terrain entirely and crosses desert
+      freely</strong>. So fog often shows you a cluster your grid can't reach
+      — which is exactly the hint that it's worth wiring toward, or worth
+      spending reserve on directly. Once you've seen a tile it stays on
+      screen, dimmed, even if it falls dark again: fog never makes you
+      re-learn a board you've already explored, it just stops you acting at a
+      distance.
     </p>
     <p class="prose">
-      Two things fog can never do. It can't hide anything you've activated —
-      an active tile always lights its own square — so it can never strip
-      progress from view, and it can never block the free cull that rescues
-      a starving colony. And because it limits what's actionable, a run can
-      end with plenty of board left simply because nothing visible is worth
-      tapping.
+      Two things fog can never do. It can't hide anything that's running — a
+      running tile always lights its own square — so it can never strip
+      progress from view, and it can never stop you switching off the thing
+      that's draining you.
     </p>
 
     <h3 class="h">When you're not sure what just happened</h3>
     <p class="prose">
       Tap <strong>log</strong> in the top right. It shows what your most
-      recent tap did — what it cost, how many tiles it lit, what happened to
-      population and food, where the energy went — and next to each effect,
-      the short reason it followed. It's the fastest way to see <em>why</em>
-      a mine earned nothing, or why a cascade stopped where it did, without
-      working backwards from the board. It only ever shows the last turn, so
-      check it while the surprise is fresh.
+      recent tap did — what your grid made and drew, which tiles came on or
+      went dark, what happened to population and food, where the energy went —
+      and next to each effect, the short reason it followed. It's the fastest
+      way to see <em>why</em> a mine earned nothing, or why the energy stopped
+      where it did, without working backwards from the board. It only ever
+      shows the last turn, so check it while the surprise is fresh.
     </p>
 
     <h3 class="h" id="ending">How a run ends</h3>
     <p class="prose">
-      A run resolves the moment nothing about the board can change further —
-      whichever happens first:
+      Both endings are checked after every turn:
     </p>
     <ul>
-      <li><strong>Energy hits 0.</strong> The original rule: no taps left to spend.</li>
-      <li><strong>The board is exhausted.</strong> New with mining: if your
-        colony earns more than it spends, energy can climb instead of drain.
-        Once every remaining tile would either do nothing if tapped, or cost
-        more than the energy you have left, the run ends right there — even
-        with energy still on the clock.</li>
+      <li><strong>You win</strong> as soon as the level's goal is met. Most
+        levels ask for a fraction of the whole board to be <em>running at
+        once</em> — a snapshot, not a total, so you have to hold it, not just
+        have touched it. Some ask instead for a fraction of the board to have
+        been <em>revealed</em>, which is monotonic and can't be lost.</li>
+      <li><strong>You lose to a blackout</strong> — your reserve is at 0 and
+        there are still tiles switched on that nothing can power. Note what
+        that isn't: running out of reserve is not by itself a loss. If your
+        grid pays for itself, you can sit at 0 indefinitely.</li>
     </ul>
-    <p class="prose">
-      Either way, the fraction of the whole board that ended up activated is
-      compared against the level's completion goal: meet or beat it and it's
-      a win, fall short and it's a loss.
-    </p>
 
-    <h3 class="h">Recolonized's numbers</h3>
+    <h3 class="h">Level knobs</h3>
     <div class="panel">
-      <div class="panel-cap">Fig. 4 — Level knobs, "Recolonized"</div>
+      <div class="panel-cap">Fig. 4 — What a level file can set</div>
       <table class="knobs">
-        <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
-        <tr><td>energyBudget</td><td class="val">7</td><td>Starting energy</td></tr>
-        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the 96-tile board you need lit</td></tr>
-        <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per active farm</td></tr>
-        <tr><td>mineYield</td><td class="val">2</td><td>Energy per active mine, while fed</td></tr>
-        <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity</td></tr>
-        <tr><td>powerPlantBoost</td><td class="val">5</td><td>Signal added by the power plant (default)</td></tr>
-        <tr><td>fogDistance</td><td class="val">2</td><td>How far you can see from anything lit (−1 = no fog)</td></tr>
+        <tr><th>Knob</th><th>Default</th><th>Meaning</th></tr>
+        <tr><td>energyBudget</td><td class="val">—</td><td>Starting reserve (required)</td></tr>
+        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the board the goal asks for</td></tr>
+        <tr><td>goal</td><td class="val">powered</td><td><code>powered</code> (running at once) or <code>revealed</code></td></tr>
+        <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per running farm</td></tr>
+        <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity, per turn</td></tr>
+        <tr><td>fogDistance</td><td class="val">−1</td><td>How far you can see from anything running (−1 = no fog)</td></tr>
+        <tr><td>startsVisible</td><td class="val">—</td><td>Tiles visible from the start, so a fogged level has an opening</td></tr>
+        <tr><td>startsEnabled</td><td class="val">—</td><td>Tiles already switched on before your first tap</td></tr>
       </table>
-      <div class="panel-note">Activation cost isn't a level knob — it's fixed per building type, everywhere, and it's what a direct tap spends from your energy pool too. See Fig. 5.</div>
+      <div class="panel-note">Costs and generation are <em>not</em> level knobs — they're fixed per building type, everywhere. A level is a shape and a budget, not a rebalance. See Fig. 5.</div>
     </div>
 
     <h3 class="h">Every tile, by the numbers</h3>
     <p class="prose">
       The whole economy on one page, independent of any particular level.
-      Values in <em>italics</em> are level knobs shown at their usual
-      setting — a level can tune those; the rest are fixed properties of the
-      building type wherever it appears.
+      <em>Cost</em> and <em>generation</em> are both per turn, for as long as
+      the tile is running.
     </p>
 
     <div class="panel">
@@ -960,28 +978,31 @@
       <div class="scroller">
         <table class="knobs">
           <tr>
-            <th>Tile</th><th>Energy<br />to tap</th><th>Energy<br />per turn</th>
-            <th>People</th><th>Food<br />needed</th><th>Food<br />grown</th><th>Spreads</th>
+            <th>Tile</th><th>Cost<br />/turn</th><th>Makes<br />/turn</th><th>Paid<br />into</th>
+            <th>People</th><th>Food<br />grown</th><th>Connects</th>
           </tr>
           <tr><td>Desert</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>never</td></tr>
           <tr><td>Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
           <tr><td>Red Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>north/south</td></tr>
           <tr><td>Green Crystal</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>east/west</td></tr>
-          <tr><td>Power Plant</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4, <em>+5 signal</em></td></tr>
-          <tr><td>Residential</td><td class="val">2</td><td class="val">—</td><td class="val">+1</td><td class="val">1</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Power Plant</td><td class="val">1</td><td class="val">5</td><td class="val">its grid</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Residential</td><td class="val">2</td><td class="val">—</td><td class="val">—</td><td class="val">+1</td><td class="val">—</td><td>all 4 ways</td></tr>
           <tr><td>Farm</td><td class="val">2</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val"><em>+1</em></td><td>all 4 ways</td></tr>
-          <tr><td>Mine</td><td class="val">3</td><td class="val"><em>+2</em></td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
-          <tr><td>Drain</td><td class="val">1</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>never</td></tr>
+          <tr><td>Mine</td><td class="val">3</td><td class="val">2</td><td class="val">your reserve</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
+          <tr><td>Drain</td><td class="val">4</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td class="val">—</td><td>all 4 ways</td></tr>
         </table>
       </div>
       <div class="panel-note">
-        <strong>Energy to tap</strong> is also the signal it takes to reach that tile through a cascade — one number, two jobs. Tap it yourself and your energy pays; reach it through a network and the signal pays, which is why everything past the tile you touched is free. A <strong>drain</strong> is the exception: it never activates, so a cascade can't reach it at all, and its flat 1 is only charged when it actually clears something.
+        <strong>Cost is also priority.</strong> Energy pays the dearest tiles it reaches first, so this column doubles as a precedence order: drain ▸ mine ▸ residential/farm ▸ crystals. Equal-cost tiles reached together are all funded or none are.
       </div>
       <div class="panel-note">
-        A <strong>mine</strong> loses you energy on the turn you tap it — 3 out, 2 back — and only turns a profit over the turns that follow. One bought late in a short level never earns out. A mine also needs the colony fed with at least one resident living somewhere on the board; it doesn't need a worker each.
+        A <strong>power plant</strong> nets <strong>+4</strong>, and a <strong>drain</strong> costs exactly that — one drain cancels one plant. A plant keeps itself running because it banks enough to cover its own cost across the turn boundary; energy can't pay for the turn that produces it.
       </div>
       <div class="panel-note">
-        Food isn't spent, it's a ceiling: you're fed while people ≤ food. Cross the line and every mine stops paying while you bleed <em>1</em> energy per person over it, every turn, until you cull someone.
+        A <strong>mine</strong> pays into your reserve, never into its own grid — so that grid must cover its 3 out of its own generation, and a mine standing alone with a plant costs the pair 4 of the plant's 5. It also needs the colony fed with at least one resident somewhere on the board; not a worker each.
+      </div>
+      <div class="panel-note">
+        Food isn't spent, it's a ceiling: you're fed while people ≤ food. Cross the line and every mine stops paying while you bleed <em>1</em> energy per person over it, every turn, until you switch a residential off.
       </div>
     </div>
   </section>
@@ -1145,42 +1166,56 @@
         <div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div>
         <div>
           <div class="lr-name">Crystal</div>
-          <div class="lr-desc">Propagates signal to connected crystals &amp; the power plant</div>
+          <div class="lr-desc">Wire, cost 1 a turn — carries energy in all four directions</div>
         </div>
       </div>
       <div class="legend-row">
         <div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div>
         <div>
           <div class="lr-name">Power Plant</div>
-          <div class="lr-desc">Boosts signal passing through it — reaches far past a lone crystal</div>
+          <div class="lr-desc">Makes 5, costs 1 — the +4 surplus everything wired to it lives on</div>
         </div>
       </div>
       <div class="legend-row">
         <div class="tile tile--res active"><div class="tile-icon"><svg><use href="#icon-person"></use></svg></div></div>
         <div>
           <div class="lr-name">Residential</div>
-          <div class="lr-desc">Houses population — tap again to free-cull it if the colony starves</div>
+          <div class="lr-desc">Cost 2, +1 population — tap again to switch it off if the colony starves</div>
         </div>
       </div>
       <div class="legend-row">
         <div class="tile tile--farm active"><div class="tile-icon"><div class="leaf"></div></div></div>
         <div>
           <div class="lr-name">Farm</div>
-          <div class="lr-desc">Grows food capacity to keep population fed</div>
+          <div class="lr-desc">Cost 2, +1 food capacity — keeps population fed</div>
         </div>
       </div>
       <div class="legend-row">
         <div class="tile tile--mine active"><div class="tile-icon is-text">$</div></div>
         <div>
           <div class="lr-name">Mine</div>
-          <div class="lr-desc">Converts a fed colony into energy income</div>
+          <div class="lr-desc">Cost 3, pays 2 into your reserve — needs the colony fed and populated</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div>
+        <div>
+          <div class="lr-name">Red / Green Crystal</div>
+          <div class="lr-desc">Wire that carries one axis only — red north/south, green east/west, so parallel runs can sit flush without merging</div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="tile tile--drain active"><div class="tile-icon is-text">×</div></div>
+        <div>
+          <div class="lr-name">Drain</div>
+          <div class="lr-desc">Cost 4 a turn and gives nothing back — exactly one power plant's whole surplus</div>
         </div>
       </div>
       <div class="legend-row">
         <div class="tile"></div>
         <div>
           <div class="lr-name">Desert</div>
-          <div class="lr-desc">Inert — never activates, never costs energy to tap</div>
+          <div class="lr-desc">Inert — never runs, never costs anything, and breaks a grid in two</div>
         </div>
       </div>
     </div>

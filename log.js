@@ -38,21 +38,15 @@ export function describeTurn(world, turn) {
     });
   }
 
-  // The grids, and whether they can pay for themselves.
-  const strained = turn.groups.filter((g) => g.shortfall > 0);
-  if (turn.groups.length > 0) {
-    const biggest = [...turn.groups].sort((a, b) => b.group.length - a.group.length)[0];
-    lines.push({
-      what: `${plural(turn.groups.length, "grid")}, largest ${plural(biggest.group.length, "tile")}` +
-        ` (makes ${biggest.generation}, costs ${biggest.cost})`,
-      why: "everything wired together shares one budget — a grid runs only if the whole of it is affordable",
-    });
-  }
+  lines.push({
+    what: `Grid makes ${turn.produced}, draws ${turn.consumed}`,
+    why: "energy flows outward from generators, paying for the dearest tiles it reaches first",
+  });
 
   if (turn.darkened.length > 0) {
     lines.push({
       what: `${plural(turn.darkened.length, "tile")} went dark`,
-      why: "a grid that can't cover its own cost browns out entirely — never partly, so the game never picks which tiles to drop",
+      why: "the wave couldn't reach them — cut load or add generation and they come back",
     });
   } else if (turn.lit.length > 0) {
     lines.push({
@@ -61,10 +55,10 @@ export function describeTurn(world, turn) {
     });
   }
 
-  if (turn.shortfall > 0) {
+  if (turn.fromPool > 0) {
     lines.push({
-      what: `−${turn.shortfall} ⚡ upkeep`,
-      why: `${plural(strained.length, "grid")} can't pay for ${strained.length === 1 ? "itself" : "themselves"} — your pool is covering the difference`,
+      what: `−${turn.fromPool} ⚡ upkeep`,
+      why: "your grid draws more than it makes, so the reserve is covering the difference every turn",
     });
   }
 

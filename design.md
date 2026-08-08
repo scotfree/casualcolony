@@ -143,6 +143,19 @@ knobs shown at their defaults.
 source of pressure: a grid you can't afford drains your pool every turn until
 it goes dark.
 
+**Cost also sets priority, not just price.** Energy flowing out from a
+generator serves the dearest tiles it reaches first, so with only three
+distinct costs the table doubles as a precedence order: drain (4) ▸ mine (3) ▸
+residential/farm (2) ▸ crystals (1). A drain or a mine sitting one step from a
+plant will take the energy a whole run of crystals behind it was going to
+use — which is a thing to place deliberately, not an accident. A tie is
+resolved by funding the entire cost class or none of it; the rule never picks
+between equals.
+
+Two numbers worth keeping in mind while building a level: a plant nets **+4**
+(makes 5, costs 1), so it carries four crystals, or one mine and one crystal,
+or two farms — and a **drain costs exactly a plant's whole surplus**.
+
 **Storage is what makes a generator an engine.** Energy can't pay for the turn
 that produces it, so a generator needs enough banked to cover its own cost or
 it fires once and stops. A plant has `storage: 1` against `cost: 1`, so it
@@ -1137,6 +1150,10 @@ chosen: partial power would mean the engine picking which tiles to drop, and it
 also makes the maths well-defined (generation comes from powered tiles, so
 "which subset runs" would be circular).
 
+*(Milestone 18 replaced both of those paragraphs — the whole-component solve
+turned out to have thrown the cascade away. They're left here because the
+reasoning that produced them is what Milestone 18 had to answer.)*
+
 **Two states, not one.** `enabled` is the player's switch and persists;
 `powered` is derived every turn. An enabled-but-dark tile is drawn with a
 dashed outline — it's the feedback that says *you* over-committed, and it comes
@@ -1176,6 +1193,57 @@ layout — that coupling is what broke five tests the last time levels were
 imported, and it was the level-tuning trap encoded in the suite. Mechanics are
 tested on synthetic fixtures; levels are only checked to parse, offer a legal
 opening, and respond to play.
+
+## Milestone 18 — The cascade comes back, as a flow
+
+Milestone 17 solved each component as a single lump: total generation against
+total cost, run it or don't. That's defensible arithmetic and it quietly
+deleted the best thing the game had. Powering a plant no longer *spread* — the
+whole grid snapped on or stayed off, and the moment-to-moment pleasure of
+watching energy travel went with it. It shipped as a rewrite of the power model
+and nothing else; turns, storage, colony and fog are untouched.
+
+**Energy flows outward again, but conserved.** The original cascade handed each
+neighbour whatever signal was left, so a branch duplicated it and a wide
+network cost no more than a narrow one. Now every unit is spent exactly once.
+Generators that can start themselves light first; each step, the wave looks at
+every unpowered tile wired to what's already lit and tries to pay for them.
+
+**The dearest tiles get first refusal.** Candidates are served in *descending*
+order of cost, a whole cost class at a time. Expensive tiles can therefore
+starve a branch beyond them — which reads as a routing mechanic you build with
+deliberately rather than as a limit you bump into. It's also the first thing in
+the game where load *placement* matters and not just load total, which is the
+"topology should be exercised" complaint answered directly.
+
+**All or none within a class, because ties are the common case.** Only three
+distinct costs exist and roughly half a typical board is cost 1, so a per-tile
+tiebreak ("top-left wins") wouldn't be a rare fallback — it would be the engine
+silently deciding most outcomes. Funding a whole cost class or none of it
+removes the question: nothing is ever picked over an equal peer. This is the
+no-geography principle doing real work rather than being asserted.
+
+**The frontier pools its surplus** rather than each tile spending its own,
+otherwise a tile bordered by two powered neighbours would be funded by whichever
+the walk visited first, and traversal order would leak into the result.
+
+**Generation stays inside its own grid; only the reserve is shared.** The first
+version of this tracked one global `produced - consumed`, which meant an
+unwired plant's spare energy could fund a different grid's frontier — the
+topology principle broken by an accumulator, and caught only by writing the
+test that asserted it. Surplus is now per component. The reserve genuinely is
+one shared thing, so grids can contend for it, and the same all-or-none rule
+applies there: if it can't cover everyone asking, nobody draws on it.
+
+A consequence worth stating: `fromPool` is *not* `consumed - produced`. A grid
+sitting on unused surplus doesn't offset another grid's shortfall.
+
+**Brownout became local.** Over-commit and the wave stops short of the tiles it
+can't reach rather than the whole grid going dark. The dashed enabled-but-dark
+outline now marks a frontier, which is more informative than a blanket. The
+rise-and-fall works as intended: over-extend on a full reserve and you get
+several turns of grace, the pool drains at a steady visible rate, and when it
+empties the wave retreats to exactly what generation alone can carry.
 
 ## Decisions so far
 
@@ -1217,8 +1285,11 @@ opening, and respond to play.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
-| Power is solved per connected component, per turn | Makes topology the thing that matters instead of distance, and lets generation be conserved rather than duplicated at every branch |
-| Brownout is all-or-nothing per component | Partial power would mean the engine choosing which tiles to drop, and would make the solve circular |
+| Power flows outward from generators each turn, spending every unit once | Keeps the cascade — the thing the game is actually fun to watch — while making a wide network cost more than a narrow one, which the old duplicating signal never did |
+| Candidates are served dearest-first, a whole cost class at a time | Expensive tiles starving the branch past them is a routing mechanic you can build with; funding a class all-or-none means the engine never picks between equal peers, and with half a board at cost 1 ties are the common case, not a corner |
+| Surplus is tracked per component; only the reserve is shared | A global accumulator let an unwired plant fund a different grid's frontier, which is the topology principle broken by bookkeeping |
+| When the reserve can't cover every grid drawing on it, none of them draw | Same reason as within a cost class — the alternative is the engine deciding which grid matters |
+| Brownout is local: the wave stops short rather than the grid going dark | A frontier tells you *where* you ran out; a blanket blackout only tells you that you did |
 | Generators need `storage` >= their cost to restart themselves | Energy can't pay for the turn that produces it; without a bank a generator would need re-clicking every turn |
 | Pool-output generation is excluded from its own grid's budget | Keeps the power solve independent of the colony, so there's no circular dependency between them |
 | `applyTurn` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
