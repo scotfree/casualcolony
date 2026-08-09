@@ -15,7 +15,7 @@
 // has to be correct before the first tap has happened.
 
 import { components } from "./power.js";
-import { buildingFor, costOf, generationOf, paysPool } from "./buildings.js";
+import { buildingFor, costOf, generationOf, paysPool, selfStarting } from "./buildings.js";
 import { resolveColony, poolIncome, starvationCost } from "./colony.js";
 
 const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -59,6 +59,24 @@ function groupRows(cells, staffed) {
 
   // Dearest first, matching the order the cascade itself serves them in.
   return [...groups.values()].sort((a, b) => b.cost / b.count - a.cost / a.count);
+}
+
+// One line per building type, for the reserve's own totals: what makes up
+// "upkeep −1" or "mined +4". The grid tables already carry the same tiles, but
+// a bare total there doesn't say which of them your reserve is actually
+// paying — and under the two-budget rule that's exactly the thing to be able
+// to look up.
+function tally(cells, amountFor) {
+  const groups = new Map();
+  for (const cell of cells) {
+    if (!groups.has(cell.type)) {
+      groups.set(cell.type, { type: cell.type, name: buildingFor(cell).name, count: 0, amount: 0 });
+    }
+    const row = groups.get(cell.type);
+    row.count++;
+    row.amount += amountFor(buildingFor(cell));
+  }
+  return [...groups.values()].sort((a, b) => b.amount - a.amount);
 }
 
 // { grids, reserve, empty } for the board as it stands.
@@ -114,11 +132,22 @@ export function describeBudget(world) {
     turnsLeft = Math.floor((energy - upkeep) / -net) + 1;
   }
 
+  // Which tiles those two totals are made of. Earners are picked with the same
+  // predicate poolIncome uses (colony.js) rather than a second guess at it, so
+  // the breakdown can't disagree with the number it explains.
+  const earners = [...powered].filter((cell) => {
+    const building = buildingFor(cell);
+    if (!paysPool(building) || !selfStarting(building)) return false;
+    return !(building.colony?.requiresLabor && !colony.staffed);
+  });
+
   return {
     grids,
     empty: grids.length === 0,
     reserve: {
       energy, upkeep, income, starvation, net, turnsLeft, blocked,
+      upkeepRows: tally(fed, costOf),
+      incomeRows: tally(earners, generationOf),
       population: colony.population,
       foodCapacity: colony.foodCapacity,
       staffed: colony.staffed,

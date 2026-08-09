@@ -275,14 +275,14 @@ export function openBudget({ budget, onBack }) {
     const totals = document.createElement("div");
     totals.className = "budget-table budget-totals";
 
-    const line = (label, value, className = "") => {
+    const line = (label, value, className = "", rowClass = "") => {
       const name = document.createElement("div");
-      name.className = "budget-name";
+      name.className = `budget-name ${rowClass}`.trim();
       name.textContent = label;
       totals.appendChild(name);
 
       const amount = document.createElement("div");
-      amount.className = `budget-num ${className}`;
+      amount.className = `budget-num ${className} ${rowClass}`.trim();
       amount.textContent = value;
       totals.appendChild(amount);
 
@@ -292,9 +292,21 @@ export function openBudget({ budget, onBack }) {
       totals.appendChild(document.createElement("div"));
     };
 
+    // What a total is made of, indented beneath it. "upkeep −1" on its own
+    // doesn't say *which* tile you're paying for, and that's the question the
+    // two-budget rule makes people ask.
+    const breakdown = (rows, sign, className = "") => {
+      for (const row of rows) {
+        const label = row.count > 1 ? `${row.name} ×${row.count}` : row.name;
+        line(label, `${sign}${row.amount}`, className, "budget-sub");
+      }
+    };
+
     const { reserve } = budget;
     line("upkeep", `−${reserve.upkeep}`);
+    breakdown(reserve.upkeepRows, "−");
     line("mined", `+${reserve.income}`, reserve.income > 0 ? "budget-gain" : "");
+    breakdown(reserve.incomeRows, "+", "budget-gain");
     if (reserve.starvation > 0) line("starvation", `−${reserve.starvation}`, "budget-loss");
     line("net", `${reserve.net >= 0 ? "+" : ""}${reserve.net} /turn`,
       reserve.net < 0 ? "budget-loss" : "budget-gain");

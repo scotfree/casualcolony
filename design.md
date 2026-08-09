@@ -1314,6 +1314,29 @@ mode the same slots become `save as` and `play`, plus `menu`.
 level, so the first thing it does is ask rather than assume. `openLevelPicker`
 went with it — a screen that no longer has a caller.
 
+## Milestone 21 — A budget view, and saying where each number comes from
+
+The two-budget rule (Milestone 19) is the one thing about this economy the
+board itself cannot show. A tile lights whether your reserve or its grid's
+generation paid for it, so "what is this costing me?" has no answer you can
+read off the screen — and the log doesn't help, because it answers "what did
+that tap do", which is a different question from "what is true now".
+
+`budget.js` derives the standing balance from live board state rather than
+from a turn record, because it has to be right before the first tap. Rows are
+grouped by grid and every row names its payer; a flat list with one cost column
+would imply a single pot and quietly misstate the whole model. Tiles fold into
+one row only when everything reported about them matches — payer included — so
+four cascaded crystals are one row and a fifth you fed yourself stays separate.
+
+**The totals name their own parts.** "upkeep −1" is true and still leaves you
+asking *which tile*, which is exactly the confusion the two-budget rule
+creates: the plant you fed costs you 1 a turn while the five crystals behind it
+cost you nothing. Each reserve total now lists the building types beneath it.
+The income breakdown is filtered with the same predicate `poolIncome` uses
+rather than a second guess at it — otherwise an idle mine would appear as an
+earner under a "+0", and the rows would contradict the number they explain.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1354,6 +1377,8 @@ went with it — a screen that no longer has a caller.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
+| The budget view is derived from board state, not from a turn record | It has to be correct before the first tap, and "what is true now" isn't a question a record of the last turn can answer |
+| Every budget row names who pays for it, and each total lists its parts | Under two budgets a bare cost column implies one pot; a total without its parts leaves "−1 from what?" unanswered, which is the exact confusion the rule creates |
 | Level choice and the editor live on a title screen, not in the HUD | They throw the run away, so they shouldn't sit one tap from the board; it also stops the editor being reachable only through a run you have to ignore |
 | A level row offers "play" and "edit" as separate targets | Opening a level to change it and opening it to play it are different intentions, not one overloaded tap |
 | A cascade spreads into tiles the player never touched | Otherwise it isn't a cascade at all — it's a wire lit one segment at a time, which is exactly the bug that made clicking a plant light one tile |

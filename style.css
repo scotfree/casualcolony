@@ -423,6 +423,18 @@ body {
   margin-top: 2px;
 }
 
+/* What a total is made of, one line per building type. Indented and dimmed so
+   the totals still read as the totals — this is the answer to "where is that
+   coming from", not a second set of figures competing with them. */
+.budget-sub {
+  color: #6b7f91;
+  font-size: 11px;
+}
+
+.budget-name.budget-sub {
+  padding-left: 12px;
+}
+
 /* --- Title screen ---------------------------------------------------------
    Not a modal. A modal sits over a run you're in the middle of and closes
    back to it; this is where a run comes *from*, so it's opaque, it owns level

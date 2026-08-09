@@ -391,6 +391,47 @@ test("reserve upkeep counts what you fed, not what the cascade reached", () => {
   assertEqual(reserve.net, -1, "no income yet, so the reserve just drains");
 });
 
+test("the reserve's totals say which tiles they're made of", () => {
+  // The question the two-budget rule makes people ask: "−1 upkeep — from
+  // what?" It's the one tile you fed, and the breakdown has to name it.
+  const world = build(["PCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const { reserve } = describeBudget(world);
+
+  assertEqual(
+    reserve.upkeepRows.map((r) => [r.name, r.count, r.amount]),
+    [["Power Plant", 1, 1]],
+    "the plant you fed, and nothing the cascade reached"
+  );
+  assertEqual(
+    reserve.upkeepRows.reduce((total, r) => total + r.amount, 0), reserve.upkeep,
+    "and the breakdown adds up to the total it explains"
+  );
+  assertEqual(reserve.incomeRows, [], "nothing earning yet");
+});
+
+test("the income breakdown names the earners, and skips the idle ones", () => {
+  const staffed = build(["PPHFM"], { energyBudget: 20, foodPerFarm: 1 });
+  tap(staffed, cellAt(staffed, 0, 0));
+  const earning = describeBudget(staffed).reserve;
+  assertEqual(
+    earning.incomeRows.map((r) => [r.name, r.count, r.amount]), [["Mine", 1, 2]],
+    "one staffed mine, paying 2"
+  );
+  assertEqual(
+    earning.incomeRows.reduce((total, r) => total + r.amount, 0), earning.income,
+    "and it adds up to the total"
+  );
+
+  // Same mine, nobody living there: poolIncome skips it, so the breakdown must
+  // too or the rows would contradict the number above them.
+  const empty = build(["PPM"], { energyBudget: 20 });
+  tap(empty, cellAt(empty, 0, 0));
+  const idle = describeBudget(empty).reserve;
+  assertEqual(idle.income, 0, "no colony, so no income");
+  assertEqual(idle.incomeRows, [], "and nothing claiming to earn");
+});
+
 test("turnsLeft counts turns the reserve can still cover upkeep in full", () => {
   // Upkeep 1 a turn against a reserve of 4: pays at 4, 3, 2 and 1, then can't.
   const world = build(["PC"], { energyBudget: 5 });
