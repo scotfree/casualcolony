@@ -1337,36 +1337,6 @@ The income breakdown is filtered with the same predicate `poolIncome` uses
 rather than a second guess at it — otherwise an idle mine would appear as an
 earner under a "+0", and the rows would contradict the number they explain.
 
-## Milestone 22 — Storage does the job it was added for
-
-A fed generator was billing the reserve its cost every turn, forever. That made
-a plant a subscription rather than an engine, and it contradicted the reason
-storage exists at all: a generator banks its own cost across the turn boundary
-precisely so it doesn't need paying for again.
-
-The fix is a second predicate. `selfStarting` already answered "can this be a
-source at all"; `selfSustaining` now answers "does it pay its own running
-cost" — it makes at least its own cost *and* can hold that much across the
-boundary. Both conditions matter: `generation: 10, storage: 0` is a one-shot
-flare, not an engine, and a pool-bound output can't pay a grid-side cost
-because its generation leaves the grid.
-
-**A fed generator costs the reserve nothing and hands its grid the
-remainder.** A plant nets 4 and carries four crystals — the Milestone 18
-number, back again. Milestone 19 had moved the cost onto the reserve and given
-the grid all 5, which was arithmetically tidy and made the wrong thing true.
-
-**Self-sustaining sources are no longer held hostage to the all-or-none rule.**
-Only tiles the reserve actually carries are funded together; a plant doesn't go
-dark because you also fed one crystal too many. That was invisible before,
-since everything you fed was carried.
-
-What it does to the shape of the game: building out is free and cascades are
-the reward for wiring well, while your reserve is spent only reaching things no
-cascade can. In `Basic` the pool now holds flat at 15 while you feed plants,
-then climbs as cascade-reached mines come on — a board that pays for itself,
-which is what "self-sustaining" was supposed to mean all along.
-
 ## Decisions so far
 
 | Decision | Why |
@@ -1414,9 +1384,7 @@ which is what "self-sustaining" was supposed to mean all along.
 | A cascade spreads into tiles the player never touched | Otherwise it isn't a cascade at all — it's a wire lit one segment at a time, which is exactly the bug that made clicking a plant light one tile |
 | There is one move (feed a tile) and no way to switch anything off | The alternative was a tri-state per tile plus a rule about whether an off tile still conducts — more machinery than the game earns |
 | The reserve pays only for tiles you fed; generation pays only for cascades | Letting the wave draw on the reserve emptied the whole pool on turn one: a greedy wave will always spend a stock as if it were an income |
-| A tile that can pay its own running cost never appears on your reserve | That's what storage is for; a generator you keep paying for is a subscription, not an engine |
-| A self-sustaining tile hands its grid generation *minus* its own cost | It spent that cost on itself, so "a plant nets 4 and carries four crystals" is both true and a rule you can hold in your head |
-| Only reserve-carried tiles are funded all-or-none together | A generator shouldn't go dark because you fed one crystal too many — it was never on that bill |
+| A fed tile's full generation goes to its grid | Its own cost came out of the pool, so there's nothing to net off — and "a plant carries five crystals" is a rule you can hold in your head |
 | Upkeep is all-or-none, and failing it is the loss | Softening it means the rule choosing which of your tiles matters; the warning is the pool ticking toward your upkeep, not the moment it arrives |
 | Power flows outward from generators each turn, spending every unit once | Keeps the cascade — the thing the game is actually fun to watch — while making a wide network cost more than a narrow one, which the old duplicating signal never did |
 | Candidates are served dearest-first, a whole cost class at a time | Expensive tiles starving the branch past them is a routing mechanic you can build with; funding a class all-or-none means the engine never picks between equal peers, and with half a board at cost 1 ties are the common case, not a corner |

@@ -235,22 +235,3 @@ export function selfStarting(building) {
   if (paysPool(building)) return true;
   return generationOf(building) === 0 || storageOf(building) >= costOf(building);
 }
-
-// Whether a building pays its own running cost out of what it makes and banks,
-// rather than out of the player's reserve.
-//
-// This is what storage is *for*. A plant makes 5 and costs 1; it banks that 1
-// across the turn boundary to cover itself next turn and hands the grid the
-// other 4. So feeding a generator is a one-off decision, not a standing bill —
-// a generator you keep paying for isn't an engine, it's a subscription.
-//
-// Two conditions, and both matter. It has to make at least its own cost, and
-// it has to be able to *hold* that much across the boundary: `generation: 10,
-// storage: 0` is a one-shot flare, not an engine. A building whose output goes
-// to the pool never qualifies — its generation leaves the grid, so it can't
-// pay a grid-side cost with it.
-export function selfSustaining(building) {
-  if (paysPool(building)) return false;
-  const cost = costOf(building);
-  return generationOf(building) >= cost && storageOf(building) >= cost;
-}

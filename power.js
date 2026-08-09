@@ -11,14 +11,11 @@
 // board you wired it into. A fat reserve cannot push a cascade one tile
 // further, and a grid sitting on unused surplus cannot pay your upkeep.
 //
-// **Not everything you feed is a bill.** A generator banks enough to cover its
-// own cost across the turn boundary (buildings.js's `selfSustaining`) — that's
-// what storage is for — so feeding one is a one-off decision and it hands the
-// grid whatever's left: a plant nets 4 and carries four crystals. Anything that
-// makes nothing is carried by your reserve outright, for as long as it runs.
-//
-// **The wave.** Each step it looks at every unpowered tile wired to what's
-// already lit and tries to pay for it out of that grid's remaining generation:
+// **The wave.** A fed tile's cost came out of the reserve, so the whole of its
+// generation is free for the cascade — a fed plant hands its grid all 5, not 4,
+// and therefore carries exactly five crystals. Each step, the wave looks at
+// every unpowered tile wired to what's already lit and tries to pay for it out
+// of that grid's remaining generation:
 //
 //   Tiles are served in **descending order of cost**, a whole cost class at a
 //   time. If the grid can afford the entire class it powers all of it; if it
@@ -54,7 +51,7 @@
 // Pure: reads the world, changes nothing. The caller applies the result.
 
 import {
-  buildingFor, costOf, generationOf, paysPool, selfStarting, selfSustaining,
+  buildingFor, costOf, generationOf, paysPool, selfStarting,
 } from "./buildings.js";
 
 const AXES = {
@@ -145,45 +142,38 @@ export function solvePower(world, pool = world.energy) {
   let reserve = pool;
   let drawn = 0;      // how much of the reserve this turn actually spends
 
-  // Every tile you've fed is where a wave starts. What that costs you depends
-  // on whether it can pay its own way: a generator banks enough to cover
-  // itself (buildings.js's selfSustaining) and hands the grid the rest, so
-  // feeding one is a one-off decision. Anything else is carried by your
-  // reserve for as long as it runs.
+  // Every tile you've fed is where a wave starts, and your reserve carries its
+  // cost for as long as it runs. That's the only thing the reserve ever pays
+  // for — feeding a tile is the only move there is.
   const sources = [];
   grids.forEach((grid, index) => {
     for (const cell of grid) {
       if (!cell.enabled) continue;
-      const building = buildingFor(cell);
       // A generator with nothing banked can't restart itself, so feeding it
       // achieves nothing (see selfStarting in buildings.js).
-      if (!selfStarting(building)) continue;
-      sources.push({ cell, index, need: selfSustaining(building) ? 0 : costOf(building) });
+      if (!selfStarting(buildingFor(cell))) continue;
+      sources.push({ cell, index });
     }
   });
 
-  // The ones that need carrying are all-or-none together: if the reserve can't
-  // cover them, none come up rather than the rule choosing which of your tiles
-  // matters. Self-sustaining ones are never held hostage to that — a generator
-  // shouldn't go dark because you also fed one crystal too many.
-  const upkeep = sources.reduce((total, source) => total + source.need, 0);
-  const carried = upkeep <= reserve;
-  if (carried && upkeep > 0) {
+  // All of them or none of them: if the reserve can't carry everything you've
+  // fed, nothing comes up rather than the rule choosing which of your tiles
+  // matters. Running out is meant to be a cliff you can see coming.
+  const upkeep = sources.reduce((total, { cell }) => total + costOf(buildingFor(cell)), 0);
+  if (upkeep <= reserve) {
     reserve -= upkeep;
     drawn += upkeep;
-  }
-  for (const { cell, index, need } of sources) {
-    if (need > 0 && !carried) continue;
-    const building = buildingFor(cell);
-    powered.add(cell);
-    consumed += costOf(building);
-    if (paysPool(building)) poolIncome += generationOf(building);
-    else {
-      produced += generationOf(building);
-      // A carried tile's cost came out of the reserve, so all of its
-      // generation is free for the cascade. A self-sustaining one spent its
-      // own cost on itself, so it hands over what's left: a plant nets +4.
-      surplus[index] += generationOf(building) - (need > 0 ? 0 : costOf(building));
+    for (const { cell, index } of sources) {
+      const building = buildingFor(cell);
+      powered.add(cell);
+      consumed += costOf(building);
+      // Its cost came out of the reserve, so the whole of its generation is
+      // free for the cascade — a fed plant hands its grid all 5, not 4.
+      if (paysPool(building)) poolIncome += generationOf(building);
+      else {
+        produced += generationOf(building);
+        surplus[index] += generationOf(building);
+      }
     }
   }
 

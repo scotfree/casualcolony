@@ -15,9 +15,7 @@
 // has to be correct before the first tap has happened.
 
 import { components } from "./power.js";
-import {
-  buildingFor, costOf, generationOf, paysPool, selfStarting, selfSustaining,
-} from "./buildings.js";
+import { buildingFor, costOf, generationOf, paysPool, selfStarting } from "./buildings.js";
 import { resolveColony, poolIncome, starvationCost } from "./colony.js";
 
 const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -32,10 +30,7 @@ function groupRows(cells, staffed) {
 
   for (const cell of cells) {
     const building = buildingFor(cell);
-    // Three answers, not two. A generator you fed banks enough to cover its own
-    // cost (buildings.js's selfSustaining), so it isn't on your reserve *or* on
-    // its grid — saying "you" there would invent a bill you don't pay.
-    const payer = !cell.enabled ? "grid" : selfSustaining(building) ? "self" : "you";
+    const payer = cell.enabled ? "you" : "grid";
     const dark = cell.enabled && !cell.powered;
     // A job that's powered but contributing nothing, because nobody lives on
     // the board to work it (colony.js's requiresLabor).
@@ -96,18 +91,16 @@ export function describeBudget(world) {
     const live = group.filter((cell) => cell.powered || cell.enabled);
     if (live.length === 0) return;
 
-    // A grid's own generation, and what gets spent out of it. Anything your
-    // reserve is carrying is excluded — that cost isn't the grid's. Everything
-    // else draws here, including a fed generator's own cost, which it pays out
-    // of its own generation; that's what leaves a plant netting 4 rather
-    // than 5.
+    // A grid's own generation, and what its cascade spends. A fed tile's cost
+    // came out of the reserve, so only the tiles the wave reached draw here —
+    // and a fed tile's whole generation is available to the grid.
     let generation = 0;
     let cascadeDraw = 0;
     for (const cell of live) {
       if (!cell.powered) continue;
       const building = buildingFor(cell);
       if (!paysPool(building)) generation += generationOf(building);
-      if (!cell.enabled || selfSustaining(building)) cascadeDraw += costOf(building);
+      if (!cell.enabled) cascadeDraw += costOf(building);
     }
 
     grids.push({
@@ -120,15 +113,13 @@ export function describeBudget(world) {
     });
   });
 
-  // What you've committed to paying every turn, whether or not it's being met —
-  // and only what your reserve actually carries. A fed generator pays for
-  // itself out of storage, so it never appears here: feeding one is a decision,
-  // not a standing bill. What's left is all-or-none (power.js), so "committed
-  // but blocked" is a real state and the one worth shouting about.
+  // What you've committed to paying for every turn, whether or not it's being
+  // met. Upkeep is all-or-none: if the reserve can't carry everything you fed,
+  // none of it runs (power.js), so "committed but blocked" is a real state and
+  // the one worth shouting about.
   const fed = world.cells.filter((cell) => cell.enabled);
-  const carried = fed.filter((cell) => !selfSustaining(buildingFor(cell)));
-  const upkeep = carried.reduce((total, cell) => total + costOf(buildingFor(cell)), 0);
-  const blocked = carried.length > 0 && carried.some((cell) => !cell.powered);
+  const upkeep = fed.reduce((total, cell) => total + costOf(buildingFor(cell)), 0);
+  const blocked = fed.length > 0 && fed.some((cell) => !cell.powered);
 
   const net = blocked ? 0 : income - starvation - upkeep;
   const energy = world.energy;
@@ -155,7 +146,7 @@ export function describeBudget(world) {
     empty: grids.length === 0,
     reserve: {
       energy, upkeep, income, starvation, net, turnsLeft, blocked,
-      upkeepRows: tally(carried, costOf),
+      upkeepRows: tally(fed, costOf),
       incomeRows: tally(earners, generationOf),
       population: colony.population,
       foodCapacity: colony.foodCapacity,
