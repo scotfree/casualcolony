@@ -27,6 +27,7 @@ import {
   resolveTap, applyTurn, tap, settle, poweredFraction, revealedFraction,
 } from "./rules.js";
 import { describeTurn } from "./log.js";
+import { describeBudget } from "./budget.js";
 import { visibleCells } from "./visibility.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
@@ -314,6 +315,137 @@ test("a mine's output never counts toward its own grid's budget", () => {
     !cellAt(pair, 2, 0).powered,
     "the second needs 3 — and what the pair would pay the pool never enters the grid's sums"
   );
+});
+
+// --- Budget view (budget.js) -------------------------------------------------
+
+// The row for `type` in the first grid that has one.
+function budgetRow(budget, type, payer = null) {
+  for (const grid of budget.grids) {
+    const row = grid.rows.find((r) => r.type === type && (payer === null || r.payer === payer));
+    if (row) return row;
+  }
+  return null;
+}
+
+test("budget attributes a fed tile to you and a cascaded tile to its grid", () => {
+  const world = build(["PCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const budget = describeBudget(world);
+
+  assertEqual(budget.grids.length, 1, "one grid");
+  assertEqual(budgetRow(budget, "powerPlant").payer, "you", "you fed the plant");
+  assertEqual(budgetRow(budget, "crystal").payer, "grid", "the cascade reached the crystals");
+});
+
+test("budget groups same-type tiles but never across payers", () => {
+  // Feed one crystal directly; the plant's cascade reaches the other two.
+  const world = build(["PCCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 3, 0));
+  tap(world, cellAt(world, 0, 0));
+  const budget = describeBudget(world);
+  const crystals = budget.grids[0].rows.filter((r) => r.type === "crystal");
+
+  assertEqual(crystals.length, 2, "fed crystals and cascaded crystals stay separate rows");
+  const grid = crystals.find((r) => r.payer === "grid");
+  const you = crystals.find((r) => r.payer === "you");
+  assertEqual(grid.count, 2, "the two the cascade reached fold into one row");
+  assertEqual(you.count, 1, "the one you paid for stands alone");
+  assertEqual(grid.cost, 2, "a group's cost is the whole group's");
+});
+
+test("a fed tile's whole generation counts toward its grid's spare", () => {
+  const world = build(["PCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const grid = describeBudget(world).grids[0];
+
+  assertEqual(grid.generation, 5, "the plant hands its grid all 5, not 4");
+  assertEqual(grid.cascadeDraw, 2, "two crystals at 1 each, paid by the grid");
+  assertEqual(grid.spare, 3, "what's left to reach further");
+});
+
+test("a mine's generation is tagged for the pool, not its grid", () => {
+  const world = build(["PM"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const budget = describeBudget(world);
+
+  assertEqual(budget.grids[0].generation, 5, "only the plant feeds the grid");
+  assert(budgetRow(budget, "mine").toPool, "the mine's output is flagged as pool-bound");
+});
+
+test("a mine with nobody to work it reads as idle and pays nothing", () => {
+  const world = build(["PM"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const budget = describeBudget(world);
+
+  assert(budgetRow(budget, "mine").idle, "powered, but no colony to staff it");
+  assertEqual(budget.reserve.income, 0, "so it pays nothing into the pool");
+});
+
+test("reserve upkeep counts what you fed, not what the cascade reached", () => {
+  const world = build(["PCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const { reserve } = describeBudget(world);
+
+  assertEqual(reserve.upkeep, 1, "only the plant is yours to pay for");
+  assertEqual(reserve.net, -1, "no income yet, so the reserve just drains");
+});
+
+test("turnsLeft counts turns the reserve can still cover upkeep in full", () => {
+  // Upkeep 1 a turn against a reserve of 4: pays at 4, 3, 2 and 1, then can't.
+  const world = build(["PC"], { energyBudget: 5 });
+  tap(world, cellAt(world, 0, 0));
+  const { reserve } = describeBudget(world);
+
+  assertEqual(reserve.energy, 4, "the feeding tap already took its 1");
+  assertEqual(reserve.turnsLeft, 4, "four more turns before upkeep can't be met");
+});
+
+test("a self-sustaining board reports no deadline", () => {
+  // One plant's 5 can't carry a whole colony (2 + 2 + 3), so the second plant
+  // is reached by the cascade and doubles the grid's generation. You pay for
+  // one tile; a staffed mine pays back more than that.
+  const world = build(["PPHFM"], { energyBudget: 20, foodPerFarm: 1 });
+  tap(world, cellAt(world, 0, 0));
+  const { reserve } = describeBudget(world);
+
+  assert(reserve.staffed, "somebody lives here and is fed");
+  assertEqual(reserve.upkeep, 1, "only the plant you fed is yours to pay for");
+  assertEqual(reserve.income, 2, "the mine is staffed, so it pays");
+  assertEqual(reserve.net, 1, "income beats upkeep");
+  assertEqual(reserve.turnsLeft, null, "no deadline when nothing is draining");
+});
+
+test("over-committed upkeep reads as blocked, with the tiles struck out", () => {
+  // Two plants is 2 a turn against a reserve of 1 — all-or-none, so neither
+  // runs, and the view has to say why rather than showing an empty board.
+  const world = build(["P.P"], { energyBudget: 2 });
+  tap(world, cellAt(world, 0, 0));
+  tap(world, cellAt(world, 2, 0));
+  const budget = describeBudget(world);
+
+  assert(budget.reserve.blocked, "upkeep can't be met");
+  assertEqual(budget.reserve.turnsLeft, null, "no countdown once nothing runs");
+  const dark = budget.grids.flatMap((g) => g.rows).filter((r) => r.dark);
+  assert(dark.length > 0, "fed-but-dark tiles are still listed");
+});
+
+test("budget is empty and safe before the first tap", () => {
+  const budget = describeBudget(build(["PCC"]));
+  assert(budget.empty, "nothing running yet");
+  assertEqual(budget.grids.length, 0, "no grids to show");
+  assertEqual(budget.reserve.upkeep, 0, "nothing owed");
+});
+
+test("describeBudget changes nothing on the board", () => {
+  const world = build(["PCC"], { energyBudget: 9 });
+  tap(world, cellAt(world, 0, 0));
+  const before = world.cells.map((c) => `${c.powered}${c.enabled}`).join();
+  const energy = world.energy;
+  describeBudget(world);
+  assertEqual(world.cells.map((c) => `${c.powered}${c.enabled}`).join(), before, "board");
+  assertEqual(world.energy, energy, "energy");
+  assert(!("staffedNow" in world.cells[0]), "no scratch fields left behind");
 });
 
 // --- Rules (resolveTap / applyTurn) ------------------------------------------

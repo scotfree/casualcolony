@@ -359,6 +359,70 @@ body {
   margin-top: 3px;
 }
 
+/* --- Budget ---------------------------------------------------------------
+   A table, unlike the log, because the question is comparative: which tiles
+   cost what, and out of whose budget. Four columns — name, cost, generation,
+   and who pays — with the numbers right-aligned so they can be scanned down
+   rather than read across. */
+.budget-grid-head {
+  color: #8ea3b5;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 12px 2px 4px;
+  border-bottom: 1px solid #232b37;
+}
+
+.budget-table {
+  display: grid;
+  /* Name takes the slack; the rest are sized to their content so the columns
+     stay aligned between one grid's table and the next. */
+  grid-template-columns: 1fr auto auto auto;
+  gap: 2px 10px;
+  padding: 6px 2px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.budget-name {
+  color: #c7d3de;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fed, but not running: you're committed to the cost and getting nothing. */
+.budget-dark {
+  color: #7e93a6;
+}
+
+/* Appended to the tile's name — why this row isn't earning what it looks like
+   it should. Amber rather than red: it's a condition to fix, not a failure. */
+.budget-status {
+  color: #d9a441;
+  font-size: 11px;
+}
+
+.budget-num {
+  color: #a8b8c8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-gain { color: #5eead4; }
+.budget-loss { color: #f87171; }
+
+/* One word for why a row isn't what it looks like — "dark", "idle" — or which
+   budget pays for it otherwise. */
+.budget-tag {
+  color: #6b7f91;
+  font-size: 11px;
+  text-align: right;
+  min-width: 30px;
+}
+
+.budget-totals {
+  border-top: 1px solid #232b37;
+  margin-top: 2px;
+}
+
 /* --- Title screen ---------------------------------------------------------
    Not a modal. A modal sits over a run you're in the middle of and closes
    back to it; this is where a run comes *from*, so it's opaque, it owns level

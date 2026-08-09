@@ -23,6 +23,7 @@ import { solvePower } from "./power.js";
 import { resolveTap, applyTurn, settle, poweredFraction, revealedFraction } from "./rules.js";
 import { showTitle, hideTitle, titleShowing } from "./title.js";
 import { describeTurn } from "./log.js";
+import { describeBudget } from "./budget.js";
 import { visibleCells, rememberVisible } from "./visibility.js";
 import { cellAt } from "./grid.js";
 import { buildingFor, BUILDINGS } from "./buildings.js";
@@ -33,7 +34,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.24.0";
+const VERSION = "0.25.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -213,6 +214,23 @@ function showMenu() {
   });
 }
 
+// The log and the budget are two views of the same moment — what the last tap
+// did, and what the board costs now — so they link to each other rather than
+// each taking a slot in the HUD.
+function showLog() {
+  modals.openLog({
+    lines: describeTurn(world, lastTurn),
+    onBudget: showBudget,
+  });
+}
+
+function showBudget() {
+  modals.openBudget({
+    budget: describeBudget(world),
+    onBack: showLog,
+  });
+}
+
 // Getting edits out of this device and into the repo, and back again — see
 // exchange.js for why that's the shape of it.
 function showDataMenu() {
@@ -336,7 +354,7 @@ canvas.addEventListener("pointerdown", (event) => {
   }
 
   if (hitsButton(buttons.log, hudX, hudY)) {
-    modals.openLog({ lines: describeTurn(world, lastTurn) });
+    showLog();
     return;
   }
 

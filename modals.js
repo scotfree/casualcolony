@@ -162,7 +162,7 @@ export function openLegend({ iconOverrides }) {
 }
 
 // What the last turn did, and why — see log.js for where the lines come from.
-export function openLog({ lines }) {
+export function openLog({ lines, onBudget }) {
   open((parent) => {
     addTitle(parent, "last turn");
 
@@ -171,7 +171,6 @@ export function openLog({ lines }) {
       empty.className = "modal-note";
       empty.textContent = "Nothing yet — tap a tile, then look here to see what it did.";
       parent.appendChild(empty);
-      return;
     }
 
     for (const { what, why } of lines) {
@@ -190,6 +189,138 @@ export function openLog({ lines }) {
 
       parent.appendChild(row);
     }
+
+    // The standing balance is a different question from "what just happened",
+    // so it's a second screen reached from here rather than more lines — and
+    // it hangs off the log instead of the HUD, which is already full.
+    const toBudget = document.createElement("button");
+    toBudget.className = "option subtle";
+    toBudget.textContent = "budget →";
+    toBudget.addEventListener("click", onBudget);
+    parent.appendChild(toBudget);
+  });
+}
+
+// The standing balance: every live tile, what it costs, what it makes, and
+// which budget pays for it. See budget.js for where the numbers come from.
+export function openBudget({ budget, onBack }) {
+  open((parent) => {
+    addTitle(parent, "budget");
+
+    if (budget.empty) {
+      const empty = document.createElement("div");
+      empty.className = "modal-note";
+      empty.textContent = "Nothing running yet — feed a tile and its grid appears here.";
+      parent.appendChild(empty);
+    }
+
+    for (const grid of budget.grids) {
+      const heading = document.createElement("div");
+      heading.className = "budget-grid-head";
+      // A grid with no generator of its own has no cascade to describe — every
+      // tile in it is one you're paying for directly.
+      heading.textContent = grid.generation === 0
+        ? `grid ${grid.label} · no generation`
+        : `grid ${grid.label} · makes ${grid.generation}, ` +
+          `cascade draws ${grid.cascadeDraw}, spare ${grid.spare}`;
+      parent.appendChild(heading);
+
+      const table = document.createElement("div");
+      table.className = "budget-table";
+
+      for (const row of grid.rows) {
+        const name = document.createElement("div");
+        name.className = "budget-name" + (row.dark ? " budget-dark" : "");
+        const label = row.count > 1 ? `${row.name} ×${row.count}` : row.name;
+        name.textContent = label;
+        // Why a row isn't doing what its numbers suggest. It goes here rather
+        // than in the tag column so the tag can always answer "who pays",
+        // which is the one thing this table exists to show.
+        if (row.dark || row.idle) {
+          const status = document.createElement("span");
+          status.className = "budget-status";
+          status.textContent = row.dark ? " dark" : " idle";
+          name.appendChild(status);
+        }
+        table.appendChild(name);
+
+        const cost = document.createElement("div");
+        cost.className = "budget-num";
+        cost.textContent = `−${row.cost}`;
+        table.appendChild(cost);
+
+        const gen = document.createElement("div");
+        gen.className = "budget-num" + (row.generation > 0 && !row.idle ? " budget-gain" : "");
+        // Pool-bound generation never enters its own grid's sums, so say where
+        // it goes rather than letting it look like grid capacity.
+        gen.textContent = row.generation === 0
+          ? "·"
+          : row.toPool ? `+${row.generation}→pool` : `+${row.generation}`;
+        table.appendChild(gen);
+
+        const payer = document.createElement("div");
+        payer.className = "budget-tag";
+        payer.textContent = row.payer;
+        table.appendChild(payer);
+      }
+
+      parent.appendChild(table);
+    }
+
+    const heading = document.createElement("div");
+    heading.className = "budget-grid-head";
+    heading.textContent = "reserve";
+    parent.appendChild(heading);
+
+    const totals = document.createElement("div");
+    totals.className = "budget-table budget-totals";
+
+    const line = (label, value, className = "") => {
+      const name = document.createElement("div");
+      name.className = "budget-name";
+      name.textContent = label;
+      totals.appendChild(name);
+
+      const amount = document.createElement("div");
+      amount.className = `budget-num ${className}`;
+      amount.textContent = value;
+      totals.appendChild(amount);
+
+      // Totals use the same four-column grid as the tile tables so the numbers
+      // line up; the last two cells are empty.
+      totals.appendChild(document.createElement("div"));
+      totals.appendChild(document.createElement("div"));
+    };
+
+    const { reserve } = budget;
+    line("upkeep", `−${reserve.upkeep}`);
+    line("mined", `+${reserve.income}`, reserve.income > 0 ? "budget-gain" : "");
+    if (reserve.starvation > 0) line("starvation", `−${reserve.starvation}`, "budget-loss");
+    line("net", `${reserve.net >= 0 ? "+" : ""}${reserve.net} /turn`,
+      reserve.net < 0 ? "budget-loss" : "budget-gain");
+
+    parent.appendChild(totals);
+
+    const note = document.createElement("div");
+    note.className = "modal-note";
+    if (reserve.blocked) {
+      note.textContent =
+        `Reserve ${reserve.energy} can't cover upkeep of ${reserve.upkeep}. ` +
+        `Upkeep is all or nothing, so none of it runs.`;
+    } else if (reserve.turnsLeft !== null) {
+      note.textContent =
+        `Reserve ${reserve.energy} — about ${reserve.turnsLeft} more ` +
+        `${reserve.turnsLeft === 1 ? "turn" : "turns"} at this rate.`;
+    } else {
+      note.textContent = `Reserve ${reserve.energy} — this pays for itself.`;
+    }
+    parent.appendChild(note);
+
+    const back = document.createElement("button");
+    back.className = "option subtle";
+    back.textContent = "← last turn";
+    back.addEventListener("click", onBack);
+    parent.appendChild(back);
   });
 }
 
