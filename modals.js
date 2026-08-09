@@ -302,14 +302,18 @@ export function openBudget({ budget, onBack }) {
       }
     };
 
+    // Zero carries no sign: "−0 upkeep" reads as a cost when it's the absence
+    // of one, and "nothing owed" is a state worth showing plainly.
+    const signed = (amount, sign) => (amount === 0 ? "0" : `${sign}${amount}`);
+
     const { reserve } = budget;
-    line("upkeep", `−${reserve.upkeep}`);
+    line("upkeep", signed(reserve.upkeep, "−"));
     breakdown(reserve.upkeepRows, "−");
-    line("mined", `+${reserve.income}`, reserve.income > 0 ? "budget-gain" : "");
+    line("mined", signed(reserve.income, "+"), reserve.income > 0 ? "budget-gain" : "");
     breakdown(reserve.incomeRows, "+", "budget-gain");
     if (reserve.starvation > 0) line("starvation", `−${reserve.starvation}`, "budget-loss");
-    line("net", `${reserve.net >= 0 ? "+" : ""}${reserve.net} /turn`,
-      reserve.net < 0 ? "budget-loss" : "budget-gain");
+    line("net", `${signed(reserve.net, "+")} /turn`,
+      reserve.net < 0 ? "budget-loss" : reserve.net > 0 ? "budget-gain" : "");
 
     parent.appendChild(totals);
 

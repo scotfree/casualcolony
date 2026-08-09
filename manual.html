@@ -638,24 +638,22 @@
     </p>
 
     <ol class="steps">
-      <li><strong>Tap the power plant.</strong> Your reserve now pays its cost
-        of 1, every turn, for as long as it runs. In exchange its whole
-        generation of 5 goes into the grid it's wired to — and the cascade
-        spreads outward from it, paying 1 for each crystal it reaches until
-        the 5 is gone. One tap, six tiles lit.</li>
-      <li><strong>Tap a crystal the cascade didn't reach.</strong> Now your
-        reserve is paying 2 a turn instead of 1, and that crystal becomes a
-        second place a cascade starts. Watch the ⚡ counter: it drops by 2 every
-        turn now, and it will keep dropping.</li>
+      <li><strong>Tap the power plant.</strong> It makes 5 and spends 1 of that
+        on keeping itself running, so it costs your reserve <em>nothing</em> —
+        watch the ⚡ counter and it won't move. The other 4 goes into the grid
+        it's wired to, and the cascade spreads outward paying 1 for each
+        crystal it reaches. One tap, five tiles lit, free forever.</li>
+      <li><strong>Tap a crystal the cascade didn't reach.</strong> A crystal
+        makes nothing, so it can't pay for itself — your reserve now carries
+        its 1, every turn, and the ⚡ counter starts ticking down. That crystal
+        does become a second place a cascade starts, but you're renting it.</li>
     </ol>
 
     <div class="panel">
       <div class="panel-cap">Fig. 1 — One tap on a plant, and where it stops</div>
       <div class="scroller">
         <div class="chain">
-          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">you pay 1<br />grid gets 5</div></div>
-          <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">4 left</div></div>
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">makes 5<br />keeps 1</div></div>
           <div class="chain-arrow">→</div>
           <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">3 left</div></div>
           <div class="chain-arrow">→</div>
@@ -668,27 +666,29 @@
           <div class="chain-step"><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="val">out of<br />generation</div></div>
         </div>
       </div>
-      <div class="panel-note">The crystals cost the <em>grid</em>, not you. Your reserve only ever pays for tiles you tapped — so a plant carrying five crystals costs you 1 a turn, and a plant carrying nothing also costs you 1 a turn. Reach is free; commitments aren't.</div>
+      <div class="panel-note">None of this costs your reserve anything. A power plant banks enough to cover its own cost, so feeding one is a decision rather than a bill — your reserve is only ever spent carrying tiles that make nothing of their own.</div>
     </div>
 
     <div class="callout">
       <div class="cap">The number that matters</div>
       <p>
-        A power plant makes <strong>5</strong>. Every crystal past it costs
-        1. So one tap on a plant is worth six tiles if they're wired to it, and
-        one tile if they aren't. Everything you do in this game is trying to
-        make that first number happen instead of the second.
+        A power plant nets <strong>4</strong> — it makes 5 and keeps 1 to run
+        itself. Every crystal past it costs 1. So one tap on a plant is worth
+        five tiles if they're wired to it, and one tile if they aren't, and
+        either way it's free. Everything you do in this game is trying to make
+        that first number happen instead of the second.
       </p>
     </div>
 
     <div class="callout">
       <div class="cap">There is no undo</div>
       <p>
-        You can't switch a tile back off. Once you've fed something, your
-        reserve carries it until the reserve runs out — and when it can't carry
-        everything you've fed, <em>none</em> of it runs and the run is over. So
-        the pool ticking down is the clock, and every tap makes it tick faster.
-        Feed plants; let cascades do the rest.
+        You can't switch a tile back off. Feeding a generator is safe — it pays
+        its own way — but feeding anything else is a standing bill your reserve
+        carries until it runs out, and when it can't cover the whole bill,
+        <em>none</em> of those tiles run. Generators stay up regardless. So the
+        pool ticking down is the clock: feed plants, let cascades do the rest,
+        and pay for a lone tile only when it opens something up.
       </p>
     </div>
   </section>
@@ -711,8 +711,10 @@
       understanding the game:
     </p>
     <ul>
-      <li><strong>Your reserve</strong> (the ⚡ counter) pays for the tiles
-        <em>you fed</em>, every turn, and nothing else.</li>
+      <li><strong>Your reserve</strong> (the ⚡ counter) pays, every turn, for
+        the tiles you fed <em>that can't pay for themselves</em> — a generator
+        banks enough to cover its own cost, so it never appears on your
+        bill.</li>
       <li><strong>A grid's generation</strong> pays for the cascade, and
         nothing else.</li>
     </ul>
@@ -731,26 +733,23 @@
       splitting a run in two doesn't get you two runs' worth of energy.
     </p>
     <p class="prose">
-      A fed power plant hands its grid the whole <strong>5</strong> — you paid
-      its cost of 1 out of your reserve, so there's nothing to net off. Five
-      crystals, or two farms and a crystal, or a mine and two crystals. That's
-      the number to keep in your head.
+      A power plant makes 5 and spends 1 of it on itself, so it hands its grid
+      <strong>4</strong>: four crystals, or two farms, or a mine and a crystal.
+      That's the number to keep in your head.
     </p>
 
     <div class="panel">
       <div class="panel-cap">Fig. 2 — The dearest tiles reached are served first</div>
       <div class="scroller">
         <div class="chain">
-          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">5 to give</div></div>
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">4 to give</div></div>
           <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--drain active"><div class="tile-icon is-text">×</div></div><div class="val">takes 4</div></div>
-          <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">takes 1</div></div>
+          <div class="chain-step"><div class="tile tile--drain active"><div class="tile-icon is-text">×</div></div><div class="val">takes all 4</div></div>
           <div class="chain-arrow">→</div>
           <div class="chain-step"><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="val">nothing left</div></div>
         </div>
       </div>
-      <div class="panel-note">Move that drain to the far end of the run instead and the same tiles all fit — four crystals and then the drain, with the drain the only thing that goes without. Nothing changed but the order the energy meets them in.</div>
+      <div class="panel-note">A drain costs exactly a plant's whole net output, so one sitting next to a plant swallows the lot. Move it to the far end of the run and the same tiles all fit — four crystals, with the drain the only thing that goes without. Nothing changed but the order the energy meets them in.</div>
     </div>
 
     <p class="prose">
@@ -803,10 +802,10 @@
     <div class="callout">
       <div class="cap">Feed generators, not tiles</div>
       <p>
-        Feeding a plant costs you 1 a turn and can light six tiles. Feeding a
-        lone crystal costs you 1 a turn and lights one. Same bill, wildly
-        different value — which is why the game is about wiring things to a
-        generator rather than paying for them one at a time.
+        Feeding a plant costs you nothing and lights five tiles. Feeding a lone
+        crystal costs you 1 a turn, forever, and lights one. That's not a
+        trade-off, it's the whole strategy — wire things to a generator, and
+        spend your reserve only where nothing else can reach.
       </p>
     </div>
 
@@ -987,7 +986,7 @@
         <strong>Cost is also priority.</strong> Energy pays the dearest tiles it reaches first, so this column doubles as a precedence order: drain ▸ mine ▸ residential/farm ▸ crystals. Equal-cost tiles reached together are all funded or none are.
       </div>
       <div class="panel-note">
-        A <strong>power plant</strong> nets <strong>+4</strong>, and a <strong>drain</strong> costs exactly that — one drain cancels one plant. A plant keeps itself running because it banks enough to cover its own cost across the turn boundary; energy can't pay for the turn that produces it.
+        A <strong>power plant</strong> nets <strong>+4</strong> to its grid, and a <strong>drain</strong> costs exactly that — one drain cancels one plant. The plant keeps itself running because it banks enough to cover its own cost across the turn boundary (energy can't pay for the turn that produces it), and that same storage is why feeding a plant never costs your reserve anything.
       </div>
       <div class="panel-note">
         A <strong>mine</strong> pays into your reserve, never into its own grid — so that grid must cover its 3 out of its own generation, and a mine standing alone with a plant costs the pair 4 of the plant's 5. It also needs the colony fed with at least one resident somewhere on the board; not a worker each.
