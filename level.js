@@ -229,6 +229,11 @@ export function createRun(level) {
       // component is switched on but dark (see power.js).
       enabled: cell.startsEnabled,
       powered: false,
+      // Energy this tile has banked across turn boundaries. A generator refills
+      // its own storage out of its output and spends it to come up the next
+      // turn, so a run starting at 0 means the first click is always a
+      // jump-start you pay for (power.js).
+      stored: 0,
       litAt: null,
       // Whether this cell has ever been visible this run. Fog gates what you
       // can *do*, but hiding what you've already seen would only tax memory —

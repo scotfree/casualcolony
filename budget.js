@@ -14,8 +14,8 @@
 // Derived from live board state rather than from a turn record, because this
 // has to be correct before the first tap has happened.
 
-import { components } from "./power.js";
-import { buildingFor, costOf, generationOf, paysPool, selfStarting } from "./buildings.js";
+import { solvePower } from "./power.js";
+import { buildingFor, costOf, generationOf, paysPool } from "./buildings.js";
 import { resolveColony, poolIncome, starvationCost } from "./colony.js";
 
 const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -25,16 +25,19 @@ const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 // them matches. Payer is part of that key, so four cascaded crystals are one
 // row but a fifth you fed yourself stays separate — they're drawn from
 // different budgets, which is the thing the view is for.
-function groupRows(cells, staffed) {
+function groupRows(cells, staffed, solved) {
   const groups = new Map();
 
   for (const cell of cells) {
     const building = buildingFor(cell);
-    const payer = cell.enabled ? "you" : "grid";
-    const dark = cell.enabled && !cell.powered;
+    const powered = solved.powered.has(cell);
+    // Three ways a tile gets paid for, and they never mix: its own storage,
+    // your reserve, or the grid it's wired into.
+    const payer = solved.selfPowered.has(cell) ? "self" : cell.enabled ? "you" : "grid";
+    const dark = cell.enabled && !powered;
     // A job that's powered but contributing nothing, because nobody lives on
     // the board to work it (colony.js's requiresLabor).
-    const idle = paysPool(building) && cell.powered
+    const idle = paysPool(building) && powered
       && building.colony?.requiresLabor === true && !staffed;
     const key = `${cell.type}|${payer}|${dark}|${idle}`;
 
@@ -54,7 +57,13 @@ function groupRows(cells, staffed) {
     const row = groups.get(key);
     row.count++;
     row.cost += costOf(building);
-    row.generation += generationOf(building);
+    // What this tile actually hands over, not its nameplate output: a plant
+    // that keeps 1 of its 5 back shows +4, so the rows add up to the grid
+    // total above them. Pool-bound output isn't refilling anything, so it's
+    // reported whole.
+    row.generation += paysPool(building)
+      ? generationOf(building)
+      : (solved.contributed.get(cell) ?? 0);
   }
 
   // Dearest first, matching the order the cascade itself serves them in.
@@ -80,46 +89,45 @@ function tally(cells, amountFor) {
 }
 
 // { grids, reserve, empty } for the board as it stands.
+//
+// Solves the board fresh rather than reading the last turn's result, so the
+// figures are what the *next* turn costs from here — which is the question
+// being asked, since every number on this screen is per-turn. It's also how a
+// generator that has just charged shows up as free before you spend another
+// move finding out. solvePower is pure, so the returned storage is discarded.
 export function describeBudget(world) {
-  const powered = new Set(world.cells.filter((cell) => cell.powered));
-  const colony = resolveColony(world, powered);
-  const income = poolIncome(world, powered, colony);
+  const solved = solvePower(world, world.energy);
+  const colony = resolveColony(world, solved.powered);
+  const income = poolIncome(world, solved.powered, colony);
   const starvation = starvationCost(world, colony);
 
   const grids = [];
-  components(world).forEach((group) => {
-    const live = group.filter((cell) => cell.powered || cell.enabled);
+  solved.perGrid.forEach((grid) => {
+    const live = grid.cells.filter((cell) => solved.powered.has(cell) || cell.enabled);
     if (live.length === 0) return;
-
-    // A grid's own generation, and what its cascade spends. A fed tile's cost
-    // came out of the reserve, so only the tiles the wave reached draw here —
-    // and a fed tile's whole generation is available to the grid.
-    let generation = 0;
-    let cascadeDraw = 0;
-    for (const cell of live) {
-      if (!cell.powered) continue;
-      const building = buildingFor(cell);
-      if (!paysPool(building)) generation += generationOf(building);
-      if (!cell.enabled) cascadeDraw += costOf(building);
-    }
 
     grids.push({
       label: LABELS[grids.length] ?? "?",
       tiles: live.length,
-      generation,
-      cascadeDraw,
-      spare: generation - cascadeDraw,
-      rows: groupRows(live, colony.staffed),
+      // Straight from the solve: what its generators handed it after their own
+      // refills, and what the cascade spent. Re-deriving these here is how the
+      // view and the rules end up disagreeing.
+      generation: grid.generation,
+      cascadeDraw: grid.draw,
+      spare: grid.spare,
+      rows: groupRows(live, colony.staffed, solved),
     });
   });
 
-  // What you've committed to paying for every turn, whether or not it's being
-  // met. Upkeep is all-or-none: if the reserve can't carry everything you fed,
-  // none of it runs (power.js), so "committed but blocked" is a real state and
-  // the one worth shouting about.
-  const fed = world.cells.filter((cell) => cell.enabled);
+  // What the reserve is being asked for every turn. Tiles running on their own
+  // storage aren't in this — they cost you nothing — so feeding a generator is
+  // a one-off jump-start rather than a standing bill. Upkeep is all-or-none, so
+  // "committed but blocked" is a real state and the one worth shouting about.
+  const fed = world.cells.filter(
+    (cell) => cell.enabled && !solved.selfPowered.has(cell)
+  );
   const upkeep = fed.reduce((total, cell) => total + costOf(buildingFor(cell)), 0);
-  const blocked = fed.length > 0 && fed.some((cell) => !cell.powered);
+  const blocked = solved.dark.size > 0;
 
   const net = blocked ? 0 : income - starvation - upkeep;
   const energy = world.energy;
@@ -135,9 +143,9 @@ export function describeBudget(world) {
   // Which tiles those two totals are made of. Earners are picked with the same
   // predicate poolIncome uses (colony.js) rather than a second guess at it, so
   // the breakdown can't disagree with the number it explains.
-  const earners = [...powered].filter((cell) => {
+  const earners = [...solved.powered].filter((cell) => {
     const building = buildingFor(cell);
-    if (!paysPool(building) || !selfStarting(building)) return false;
+    if (!paysPool(building)) return false;
     return !(building.colony?.requiresLabor && !colony.staffed);
   });
 

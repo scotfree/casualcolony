@@ -157,12 +157,16 @@ Two numbers worth keeping in mind while building a level: a plant nets **+4**
 or two farms — and a **drain costs exactly a plant's whole surplus**.
 
 **Storage is what makes a generator an engine.** Energy can't pay for the turn
-that produces it, so a generator needs enough banked to cover its own cost or
-it fires once and stops. A plant has `storage: 1` against `cost: 1`, so it
-restarts itself forever. `generation: 10, storage: 0` would be a one-shot
-flare — the same two fields express both, with no type flag. Buildings that
-export to the **pool** (mines) never need it: from their grid's point of view
-they're just load, and their output goes elsewhere.
+that produces it, so a generator has to bank its own cost to come up again. A
+plant has `storage: 1` against `cost: 1`, so it refills itself out of its own
+output and runs forever after one jump-start. `generation: 10, storage: 0` is a
+generator that never becomes free — something has to carry it every turn. The
+same two fields express both, with no type flag. Buildings that export to the
+**pool** (mines) never bank anything: from their grid's point of view they're
+just load, and their output goes elsewhere.
+
+*(This section described the intent from Milestone 17 onward, but the code only
+had a predicate standing in for it until Milestone 20 made storage real.)*
 
 **Generation into the pool doesn't count toward its own grid's budget.** A
 mine costing 3 has to be carried by the grid's other generation; its 2 goes to
@@ -1337,6 +1341,64 @@ The income breakdown is filtered with the same predicate `poolIncome` uses
 rather than a second guess at it — otherwise an idle mine would appear as an
 earner under a "+0", and the rows would contradict the number they explain.
 
+## Milestone 20 — Storage becomes energy, and the predicate goes
+
+`storage` had never stored anything. It was a number on the building table read
+by exactly one function, `selfStarting`, as `storage >= cost` — a boolean
+asserting what storage *would* balance out to if it existed. An earlier attempt
+(reverted) added a second predicate, `selfSustaining`, next to the first; the
+revert message got it right: adding a predicate to paper over a predicate is the
+wrong direction.
+
+**Storage is now energy a cell holds.** `cell.stored` is run state. A powered
+tile refills its own storage out of its own output *before* the remainder
+reaches the grid, and a tile holding at least its own cost spends that to come
+up the following turn, costing nobody anything.
+
+**`selfStarting` is deleted, not replaced.** Whether something can run itself is
+no longer declared anywhere — it falls out of whether its own output refills its
+own storage. Worth noting how little was holding it up: of its three call sites,
+two were already dead (`colony.js` and `budget.js` both guarded
+`!paysPool(b) || !selfStarting(b)`, and `selfStarting` opens by returning true
+for pool-payers). Only `power.js` used it for real.
+
+**Three sources now, still none of them mixing.** The reserve pays for tiles you
+fed, generation pays for the cascade, and storage pays for its own tile. That
+last restriction is load-bearing: storage is a *stock*, and the Milestone 19
+disaster was a greedy wave spending a stock as though it were an income. Bounded
+to its own tile and capped by capacity, what the cascade sees is still purely a
+flow. A test asserts a charged plant reaches no further on turn ten than on turn
+one.
+
+**A plant carries four crystals, not five.** It keeps 1 of its 5 to buy its own
+next turn. That's the Milestone 18 number back again — 19 had moved the cost to
+the reserve and handed the grid all 5, which was tidy arithmetic that made the
+wrong thing true.
+
+**Feeding a generator is a jump-start, not a subscription.** Storage banked this
+turn can't be spent until the next, so the first click always costs you; from
+then on the plant is free. Loads never bank anything, so they're a bill that
+arrives every turn forever. That asymmetry is now the whole strategic shape of
+the game — and it's emergent, not stated as a rule anywhere.
+
+**Self-powered tiles are outside the all-or-none bargain.** The reserve isn't
+carrying them, so an over-drawn reserve drops your loads while your engines keep
+running. The loss condition is unchanged (reserve can't cover upkeep), but its
+texture is softer: the board falls back to what generation alone carries rather
+than going black.
+
+**What `storage: 0` actually means, since two rounds of comments got this
+wrong.** It is *not* a one-shot flare. `enabled` persists, so a fed generator
+with no storage keeps being paid for by the reserve and keeps firing every turn;
+a cascade-reached one keeps being paid by its grid. It's a generator that never
+becomes free — a fuel-burner.
+
+**Levels.** Checked before and after rather than assumed. `Basic` still wins and
+reaches further than it did (peak 44% → 56% with a play-generators-first
+strategy), because free engines leave reserve for loads. `recolonized` remains
+unwinnable at 11% against a 20% goal — but it was equally unwinnable before this
+change, so that's the walled-off colony problem, not this one.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1390,7 +1452,10 @@ earner under a "+0", and the rows would contradict the number they explain.
 | Candidates are served dearest-first, a whole cost class at a time | Expensive tiles starving the branch past them is a routing mechanic you can build with; funding a class all-or-none means the engine never picks between equal peers, and with half a board at cost 1 ties are the common case, not a corner |
 | Surplus is tracked per component | A global accumulator let an unwired plant fund a different grid's frontier, which is the topology principle broken by bookkeeping |
 | Brownout is local: the wave stops short rather than the grid going dark | A frontier tells you *where* generation ran out; a blanket blackout only tells you that it did |
-| Generators need `storage` >= their cost to restart themselves | Energy can't pay for the turn that produces it; without a bank a generator would need re-clicking every turn |
+| ~~Generators need `storage` >= their cost to restart themselves~~ — superseded by Milestone 20 | The condition was right; expressing it as a predicate over the building table instead of as energy a cell actually holds is what went wrong |
+| Storage is real per-cell energy, and pays only for its own tile | A predicate asserting what storage would balance out to is not storage; and keeping it bounded to one tile is what stops the cascade spending a stock as though it were an income |
+| A generator refills its own storage before its output reaches the grid | Refill-first means an engine always buys its own next turn, so "click it once and it runs" is guaranteed rather than dependent on how much the cascade happened to leave |
+| Energy banked this turn can't be spent until the next | It's what makes the first click a jump-start you pay for, and it's the honest version of "energy can't pay for the turn that produces it" |
 | Pool-output generation is excluded from its own grid's budget | Keeps the power solve independent of the colony, so there's no circular dependency between them |
 | `applyTurn` returns a record of what the turn did | It's the one place that knows; diffing the board afterwards would be guesswork, and wrong exactly where it matters (a tile lit then taken back by a drain leaves no trace) |
 | The log shows only the most recent turn, with a reason per effect | The question a player actually has is about the tap they just made, and the effects alone were never the confusing part — the rule behind them was |

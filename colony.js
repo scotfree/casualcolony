@@ -13,7 +13,7 @@
 // resolved from whatever came out powered. If a job ever paid back into the
 // grid *and* required labour, that would be circular and would need a rule.
 
-import { buildingFor, generationOf, paysPool, selfStarting } from "./buildings.js";
+import { buildingFor, generationOf, paysPool } from "./buildings.js";
 
 // An amount on a building is either a literal number or the name of a level
 // knob to look up, so "how much does a farm feed" stays level-tunable without
@@ -55,7 +55,7 @@ export function poolIncome(world, powered, colony) {
   let total = 0;
   for (const cell of powered) {
     const building = buildingFor(cell);
-    if (!paysPool(building) || !selfStarting(building)) continue;
+    if (!paysPool(building)) continue;
     if (building.colony?.requiresLabor && !colony.staffed) continue;
     total += generationOf(building);
   }

@@ -409,13 +409,18 @@ body {
 .budget-gain { color: #5eead4; }
 .budget-loss { color: #f87171; }
 
-/* One word for why a row isn't what it looks like — "dark", "idle" — or which
-   budget pays for it otherwise. */
+/* Which of the three budgets pays for this row: its own storage, your reserve,
+   or the grid. */
 .budget-tag {
   color: #6b7f91;
   font-size: 11px;
   text-align: right;
   min-width: 30px;
+}
+
+/* "self" is the one worth spotting — a tile that costs nobody anything. */
+.budget-tag.budget-self {
+  color: #5eead4;
 }
 
 .budget-totals {

@@ -259,7 +259,7 @@ export function openBudget({ budget, onBack }) {
         table.appendChild(gen);
 
         const payer = document.createElement("div");
-        payer.className = "budget-tag";
+        payer.className = "budget-tag" + (row.payer === "self" ? " budget-self" : "");
         payer.textContent = row.payer;
         table.appendChild(payer);
       }

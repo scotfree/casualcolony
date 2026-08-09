@@ -12,14 +12,23 @@
 //
 //   cost       — energy this tile consumes every turn while it's powered.
 //   generation — energy it produces every turn while powered. 0 for most.
-//   storage    — energy it can hold across a turn boundary. This is what
-//                lets a generator start *itself*: energy can't pay for the
-//                turn that produces it, so a generator needs enough banked
-//                to cover its own cost, or it only ever fires once from the
-//                click that enabled it. storage >= cost means "runs forever
-//                once switched on"; storage 0 with big generation would be a
-//                one-shot flare. (Batteries that buffer energy for *other*
-//                tiles are a later feature — see design.md.)
+//   storage    — how much energy this tile can bank across a turn boundary.
+//                Real energy, held per cell, not a flag: a powered tile refills
+//                its storage out of its own output before the remainder reaches
+//                the grid, and a tile holding at least its own cost spends that
+//                to come up free the following turn (see power.js).
+//
+//                So "can this run itself?" isn't declared anywhere — it falls
+//                out of the arithmetic. storage >= cost means an engine: it
+//                banks its own cost and comes up free from then on. storage 0
+//                means a generator that never becomes free — it produces, but
+//                something has to carry its cost every single turn, either your
+//                reserve or the grid it's wired into. That's a fuel-burner, not
+//                the "one-shot flare" earlier notes here claimed: `enabled`
+//                persists, so a fed generator keeps being paid for and keeps
+//                firing. (Batteries that buffer for *other* tiles are still a
+//                later feature — storage only ever pays for its own tile, which
+//                is what keeps it out of the cascade's flow.)
 //   output     — where generation goes: "grid" (default, pays for the
 //                component's own costs) or "pool" (the player's reserve).
 //                A mine is the only thing that pays into the pool, which is
@@ -223,15 +232,8 @@ export function paysPool(building) {
   return building.output === "pool";
 }
 
-// Whether a building can bring itself up each turn.
-//
-// This only bites on things that feed the *grid they sit in*: energy can't pay
-// for the turn that produces it, so such a generator needs enough banked to
-// cover its own cost or it can never restart. Anything that exports to the
-// pool is, from its grid's point of view, just a load like any other — the
-// grid powers it and it ships its output elsewhere, so there's nothing to
-// bootstrap. Same for tiles that generate nothing at all.
-export function selfStarting(building) {
-  if (paysPool(building)) return true;
-  return generationOf(building) === 0 || storageOf(building) >= costOf(building);
-}
+// There is deliberately no `selfStarting` here any more. It asserted over the
+// building table what storage was supposed to work out to, and then storage
+// never did the work. Whether a tile can bring itself up is now a question
+// about that cell's banked energy, answered in power.js, not a property of its
+// type.

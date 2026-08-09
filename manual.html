@@ -620,11 +620,17 @@
     </p>
     <p class="prose">
       There is exactly one move: <strong>feed a tile</strong>. Your reserve
-      then carries that tile's cost every turn, and a cascade starts there and
-      spreads as far as the wiring and the generation allow. You can't switch
-      anything off again, so a tap is a commitment rather than a toggle — and
-      the whole game is whether your reserve can keep carrying what you've
-      committed to while the cascades do the actual work.
+      picks up that tile's cost, and a cascade starts there and spreads as far
+      as the wiring and the generation allow. You can't switch anything off
+      again, so a tap is a commitment rather than a toggle.
+    </p>
+    <p class="prose">
+      Generators are the exception, and they're the whole strategy: a power
+      plant banks part of its own output, so from the turn after you feed it,
+      it pays for itself and costs you nothing ever again. Loads never do that.
+      So the game is really about jump-starting engines and letting cascades
+      carry the loads, because everything you feed <em>directly</em> is a bill
+      that arrives every turn until the reserve can't cover it.
     </p>
   </section>
 
@@ -638,24 +644,24 @@
     </p>
 
     <ol class="steps">
-      <li><strong>Tap the power plant.</strong> Your reserve now pays its cost
-        of 1, every turn, for as long as it runs. In exchange its whole
-        generation of 5 goes into the grid it's wired to — and the cascade
-        spreads outward from it, paying 1 for each crystal it reaches until
-        the 5 is gone. One tap, six tiles lit.</li>
-      <li><strong>Tap a crystal the cascade didn't reach.</strong> Now your
-        reserve is paying 2 a turn instead of 1, and that crystal becomes a
-        second place a cascade starts. Watch the ⚡ counter: it drops by 2 every
-        turn now, and it will keep dropping.</li>
+      <li><strong>Tap the power plant.</strong> Your reserve pays its cost of 1
+        — once. It makes 5, keeps 1 back to charge its own storage, and hands
+        the remaining 4 to the grid it's wired to. The cascade spreads outward,
+        paying 1 for each crystal it reaches until the 4 is gone. One tap, five
+        tiles lit.</li>
+      <li><strong>Take another turn and watch the ⚡ counter.</strong> It
+        doesn't move. The plant now spends its own stored energy to come up, so
+        your reserve is off the hook — the jump-start was the entire cost.</li>
+      <li><strong>Tap a crystal the cascade didn't reach.</strong> Now the
+        counter drops by 1 every single turn, forever. A crystal makes nothing,
+        so it can never bank anything, so it never stops costing you.</li>
     </ol>
 
     <div class="panel">
       <div class="panel-cap">Fig. 1 — One tap on a plant, and where it stops</div>
       <div class="scroller">
         <div class="chain">
-          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">you pay 1<br />grid gets 5</div></div>
-          <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">4 left</div></div>
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">makes 5<br />keeps 1</div></div>
           <div class="chain-arrow">→</div>
           <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">3 left</div></div>
           <div class="chain-arrow">→</div>
@@ -668,27 +674,30 @@
           <div class="chain-step"><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="val">out of<br />generation</div></div>
         </div>
       </div>
-      <div class="panel-note">The crystals cost the <em>grid</em>, not you. Your reserve only ever pays for tiles you tapped — so a plant carrying five crystals costs you 1 a turn, and a plant carrying nothing also costs you 1 a turn. Reach is free; commitments aren't.</div>
+      <div class="panel-note">The crystals cost the <em>grid</em>, not you — and after the first turn, so does the plant, out of its own storage. Reach is free, and so are engines once they're running. Only tiles you feed directly and can't bank anything are a standing bill.</div>
     </div>
 
     <div class="callout">
       <div class="cap">The number that matters</div>
       <p>
-        A power plant makes <strong>5</strong>. Every crystal past it costs
-        1. So one tap on a plant is worth six tiles if they're wired to it, and
-        one tile if they aren't. Everything you do in this game is trying to
-        make that first number happen instead of the second.
+        A power plant makes <strong>5</strong> and keeps <strong>1</strong> to
+        buy its own next turn, so it hands its grid <strong>4</strong>. Every
+        crystal past it costs 1. One tap on a plant is worth five tiles if
+        they're wired to it, and one tile if they aren't. Everything you do in
+        this game is trying to make the first number happen instead of the
+        second.
       </p>
     </div>
 
     <div class="callout">
-      <div class="cap">There is no undo</div>
+      <div class="cap">Engines are free; loads are forever</div>
       <p>
-        You can't switch a tile back off. Once you've fed something, your
-        reserve carries it until the reserve runs out — and when it can't carry
-        everything you've fed, <em>none</em> of it runs and the run is over. So
-        the pool ticking down is the clock, and every tap makes it tick faster.
-        Feed plants; let cascades do the rest.
+        You can't switch a tile back off. A generator gets itself off your books
+        after one turn, but anything that makes nothing — crystals, housing,
+        farms — is carried by your reserve for as long as the run lasts. When
+        the reserve can't cover all of them at once, <em>none</em> of them run
+        and the run is over. Your engines keep going, but that isn't a recovery.
+        Feed plants freely; feed anything else only when you mean it.
       </p>
     </div>
   </section>
@@ -712,15 +721,33 @@
     </p>
     <ul>
       <li><strong>Your reserve</strong> (the ⚡ counter) pays for the tiles
-        <em>you fed</em>, every turn, and nothing else.</li>
+        <em>you fed</em> that can't pay for themselves, every turn.</li>
       <li><strong>A grid's generation</strong> pays for the cascade, and
         nothing else.</li>
+      <li><strong>A tile's own storage</strong> pays for that tile, and nothing
+        else — never for a neighbour.</li>
     </ul>
     <p class="prose">
-      So a big reserve can't push a cascade one tile further, and a plant
-      sitting on unused generation can't pay your bills. Costs are upkeep —
-      crystals 1, residential and farm 2, a mine 3, a drain 4, <em>every turn
-      it runs</em>, never a one-off price.
+      So a big reserve can't push a cascade one tile further, a plant sitting on
+      unused generation can't pay your bills, and a charged battery can't lend
+      to the tile next door. Costs are upkeep — crystals 1, residential and farm
+      2, a mine 3, a drain 4, <em>every turn it runs</em>, never a one-off
+      price. What changes is only <em>who</em> pays them.
+    </p>
+
+    <h3 class="h">Storage, and why engines go free</h3>
+    <p class="prose">
+      A tile with storage banks energy out of its own output before any of it
+      reaches the grid, and spends what it banked to come up the following turn.
+      A power plant makes 5, holds 1, and passes on 4 — so from turn two it
+      needs nothing from you. Energy can't pay for the turn that produces it,
+      which is why the first tap is always a jump-start you pay for.
+    </p>
+    <p class="prose">
+      This also means an engine survives a reserve you've overdrawn. Storage
+      isn't part of the all-or-none bargain, so when your loads all drop, your
+      plants keep running. The board doesn't go black — it goes back to exactly
+      what generation alone can carry.
     </p>
 
     <h3 class="h">How energy travels</h3>
@@ -731,26 +758,25 @@
       splitting a run in two doesn't get you two runs' worth of energy.
     </p>
     <p class="prose">
-      A fed power plant hands its grid the whole <strong>5</strong> — you paid
-      its cost of 1 out of your reserve, so there's nothing to net off. Five
-      crystals, or two farms and a crystal, or a mine and two crystals. That's
-      the number to keep in your head.
+      A power plant hands its grid <strong>4</strong> — it makes 5 and keeps 1
+      back to buy its own next turn. Four crystals, or two farms, or a mine and
+      a crystal. That's the number to keep in your head.
     </p>
 
     <div class="panel">
       <div class="panel-cap">Fig. 2 — The dearest tiles reached are served first</div>
       <div class="scroller">
         <div class="chain">
-          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">5 to give</div></div>
+          <div class="chain-step"><div class="tile tile--plant active"><div class="tile-icon"><svg><use href="#icon-bolt"></use></svg></div></div><div class="val">4 to give</div></div>
           <div class="chain-arrow">→</div>
           <div class="chain-step"><div class="tile tile--drain active"><div class="tile-icon is-text">×</div></div><div class="val">takes 4</div></div>
           <div class="chain-arrow">→</div>
-          <div class="chain-step"><div class="tile tile--crystal active"><div class="tile-icon is-text">+</div></div><div class="val">takes 1</div></div>
+          <div class="chain-step"><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="val">nothing left</div></div>
           <div class="chain-arrow">→</div>
           <div class="chain-step"><div class="tile tile--crystal"><div class="tile-icon is-text">+</div></div><div class="val">nothing left</div></div>
         </div>
       </div>
-      <div class="panel-note">Move that drain to the far end of the run instead and the same tiles all fit — four crystals and then the drain, with the drain the only thing that goes without. Nothing changed but the order the energy meets them in.</div>
+      <div class="panel-note">Move that drain to the far end of the run instead and the crystals all fit — four of them, with the drain the only thing that goes without. Nothing changed but the order the energy meets them in.</div>
     </div>
 
     <p class="prose">
@@ -788,25 +814,27 @@
     <h3 class="h">Your reserve is a clock</h3>
     <p class="prose">
       The ⚡ number in the HUD is your <strong>reserve</strong>, and your
-      <strong>upkeep</strong> is the total cost of every tile you've fed. Each
-      turn the upkeep comes out and any working mines pay back in. If upkeep is
-      bigger than what the mines bring, the counter ticks down — and you can
-      read exactly how many turns you have left off the screen.
+      <strong>upkeep</strong> is the total cost of every tile you've fed that
+      isn't covering itself out of storage. Each turn the upkeep comes out and
+      any working mines pay back in. If upkeep is bigger than what the mines
+      bring, the counter ticks down — and you can read exactly how many turns
+      you have left off the screen. Open the <strong>budget</strong> view from
+      the log to see which tiles that number is made of, and who pays for each.
     </p>
     <p class="prose">
-      When the reserve can't cover the whole bill, <strong>nothing you fed
-      runs</strong> — not some of it, all of it goes dark at once, and that's
-      the loss. It's abrupt on purpose: the alternative is the game deciding
-      which of your tiles matters. The warning isn't that moment, it's the
-      several turns of countdown before it.
+      When the reserve can't cover the whole bill, <strong>nothing it was
+      carrying runs</strong> — not some of it, all of it goes dark at once, and
+      that's the loss. It's abrupt on purpose: the alternative is the game
+      deciding which of your tiles matters. The warning isn't that moment, it's
+      the several turns of countdown before it.
     </p>
     <div class="callout">
       <div class="cap">Feed generators, not tiles</div>
       <p>
-        Feeding a plant costs you 1 a turn and can light six tiles. Feeding a
-        lone crystal costs you 1 a turn and lights one. Same bill, wildly
-        different value — which is why the game is about wiring things to a
-        generator rather than paying for them one at a time.
+        Feeding a plant costs you 1 <em>once</em> and can light five tiles.
+        Feeding a lone crystal costs you 1 <strong>every turn for the rest of
+        the run</strong> and lights one. That asymmetry is the game: wire things
+        to a generator instead of paying for them one at a time.
       </p>
     </div>
 

@@ -104,6 +104,8 @@ export function applyTurn(world, tap, now = 0) {
 
   const solved = solvePower(world, world.energy);
   world.energy -= solved.fromPool;
+  // solvePower is pure, so committing next turn's storage is the caller's job.
+  for (const [cell, value] of solved.stored) cell.stored = value;
 
   const colony = resolveColony(world, solved.powered);
   const income = poolIncome(world, solved.powered, colony);
@@ -150,6 +152,9 @@ export function tap(world, cell, now = 0) {
 // a level that starts with tiles already enabled is powered before turn one.
 export function settle(world, now = 0) {
   const solved = solvePower(world, world.energy);
+  // Turn zero banks storage the same as any other, so a level opening with
+  // tiles already enabled has its generators charged for turn one.
+  for (const [cell, value] of solved.stored) cell.stored = value;
   // Stamp the pulse too, or the opening position renders as powered-but-dark:
   // litAt is what the tile renderer animates from, and a null reads as unlit.
   const depths = pulseDepths(world, solved.powered);
