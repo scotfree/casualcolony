@@ -6,19 +6,10 @@
       "height": 10
     },
     "energyBudget": 12,
+    "completionGoal": 0.2,
     "foodPerFarm": 1,
     "starvationPenalty": 1,
     "fogDistance": 2,
-    "goal": {
-      "kind": "powered",
-      "value": 0.1
-    },
-    "startsVisible": [
-      [
-        2,
-        4
-      ]
-    ],
     "legend": {
       ".": "desert",
       "C": "crystal",
@@ -28,17 +19,31 @@
       "M": "mine"
     },
     "grid": [
-      "..HHHH..",
-      "..FFF...",
-      "..MMM...",
+      "..HHH...",
+      ".PFFFP..",
       "........",
-      "..P.....",
-      ".CCC....",
-      ".C.C....",
-      ".CCC....",
+      "........",
+      "..PMMM..",
+      "........",
+      "........",
+      "........",
       "........",
       "........"
-    ]
+    ],
+    "startsVisible": [
+      [
+        5,
+        1
+      ],
+      [
+        2,
+        4
+      ]
+    ],
+    "goal": {
+      "kind": "powered",
+      "value": 0.1
+    }
   },
   {
     "name": "Basic",
