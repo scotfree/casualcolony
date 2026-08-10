@@ -11,7 +11,7 @@
     "fogDistance": 2,
     "goal": {
       "kind": "powered",
-      "value": 0.2
+      "value": 0.05
     },
     "startsVisible": [
       [
