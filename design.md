@@ -1399,6 +1399,41 @@ strategy), because free engines leave reserve for loads. `recolonized` remains
 unwinnable at 11% against a 20% goal — but it was equally unwinnable before this
 change, so that's the walled-off colony problem, not this one.
 
+## Milestone 21 — Completion is measured in energy, and `completionGoal` is gone
+
+**A `powered` goal is now a share of the board's running cost, not of its
+tiles.** Counting cells made desert part of the target, which is how
+`recolonized` ended up asking for 20% of 80 cells — 16 tiles — on a board where
+only 12 can ever light. It was unwinnable by arithmetic, and nothing in the code
+could say so. Cost fixes it without a special case: inert tiles cost 0 and drop
+out of both halves of the fraction.
+
+It also weights the goal by what a tile is worth running. A mine is 3 and a
+crystal is 1, so lighting the expensive end of the board counts for more — the
+same ordering the cascade already serves tiles in, now reflected in the score.
+
+`revealedFraction` deliberately stays in cells: a `revealed` goal is about
+touring the map, and desert is part of the map you tour.
+
+The HUD counter moved to the same basis (`7 / 24 powered` is energy, not tiles),
+because a tile count next to a cost-based goal is two different measures of the
+same thing on one screen.
+
+**`completionGoal` is deleted.** It was the pre-`goal` spelling, and `parseGoal`
+only ever read it when `goal` was absent — so a level carrying both had its
+`completionGoal` silently ignored, which is exactly the trap it laid: a number
+you can retune that does nothing. Worse, `serializeLevel` writes every
+`LEVEL_NUMBERS` key, so the editor emitted the dead field on every save.
+
+Removed outright rather than kept as a legacy alias. A level without a `goal`
+now takes the default (`powered`, 0.2) — the same default `completionGoal` had.
+
+**Levels weren't retuned.** `recolonized` at 0.2 now needs 4.8 of 24 and is
+winnable (a greedy line reaches 29%); `Basic` at 0.25 needs 19.8 of 79, almost
+exactly what it needed before, and reaches 87%. The existing values still mean
+something reasonable, but they mean something *different*, so they're worth a
+pass.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1409,7 +1444,9 @@ change, so that's the walled-off colony problem, not this one.
 | Ripple via BFS depth + timestamps | Cascade feel, with no timers and a pure, testable traversal |
 | Sandbox before energy | Get the cascade feeling right before adding pressure |
 | Energy costs 1 per tap, not per cell lit | Rewards finding big connected clusters instead of counting cells |
-| Completion goal is a fraction of the whole board | Ties level design directly to crystal density instead of a second hidden number |
+| ~~Completion goal is a fraction of the whole board~~ — superseded by Milestone 21 | Counting cells made inert tiles part of the target, so a sparse board could set a goal it was arithmetically unable to reach |
+| A `powered` goal is a share of the board's total running cost | Inert tiles cost 0 and fall out of both halves, and a tile counts for what it's worth to run — a mine for 3, a crystal for 1 |
+| `completionGoal` deleted rather than kept as a legacy alias | It only applied when `goal` was absent, so a level carrying both silently ignored it — a number you could retune to no effect, which the editor then wrote on every save |
 | Signal costs activation per hop; only a power plant's boost extends reach | Turns "which cluster" into "how far can this reach" — reach becomes a level-design lever, not just density |
 | Boost lives in the level file, referenced from the building via `boostKey`; activation cost lives on the building type itself | Boost is a level-design lever ("how far can this reach"); cost is a property of what a tile *is*, the same as its color — different enough knobs that they don't belong in the same place (see Milestone 9) |
 | Tile picker is a DOM modal, not canvas-drawn | Buttons with labels and a selected state are what HTML already does well; no reason to reimplement that in canvas |

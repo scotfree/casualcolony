@@ -19,7 +19,7 @@
 
 import { solvePower } from "./power.js";
 import { resolveColony, poolIncome, starvationCost } from "./colony.js";
-import { buildingFor, generationOf } from "./buildings.js";
+import { buildingFor, generationOf, costOf } from "./buildings.js";
 import { visibleCells } from "./visibility.js";
 
 // Milliseconds between successive rings of the pulse. Lives here because
@@ -166,13 +166,43 @@ export function settle(world, now = 0) {
   return solved;
 }
 
-// How much of the board is powered right now, as a fraction of every cell —
-// inert ones included, which is what ties a level's goal to its density.
+// How much of the board's power demand is running right now, measured in
+// energy rather than in tiles: the cost of everything powered over the cost of
+// everything that *could* be powered.
+//
+// Counting cells made desert part of the target, so a sparse board could set a
+// goal it was arithmetically incapable of reaching — `recolonized` asked for
+// 20% of 80 cells, or 16 tiles, on a board with only 12 that can ever light.
+// Cost has that fixed for free, since inert tiles cost 0 and drop out of both
+// halves of the fraction.
+//
+// It also weights the goal by what a tile is worth running. A mine is 3 and a
+// crystal is 1, so lighting the expensive end of the board counts for more —
+// which is the same ordering the cascade already serves tiles in.
+export function powerDemand(world) {
+  let running = 0;
+  let total = 0;
+  for (const cell of world.cells) {
+    const cost = costOf(buildingFor(cell));
+    total += cost;
+    if (cell.powered) running += cost;
+  }
+  return { running, total };
+}
+
 export function poweredFraction(world) {
-  return world.cells.filter((cell) => cell.powered).length / world.cells.length;
+  const { running, total } = powerDemand(world);
+  // A board of nothing but desert has no demand to satisfy. Reachable through
+  // the editor, and 0/0 would otherwise poison every comparison against it.
+  return total === 0 ? 0 : running / total;
 }
 
 // How much of the board has ever been seen. Monotonic, unlike powered.
+//
+// Still counted in cells, not cost, and deliberately: a `revealed` goal is
+// about touring the map, and desert is part of the map you tour. The "inert
+// tiles aren't a target" argument applies to powering things, not to seeing
+// them.
 export function revealedFraction(world) {
   return world.cells.filter((cell) => cell.seen).length / world.cells.length;
 }

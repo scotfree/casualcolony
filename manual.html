@@ -974,8 +974,8 @@
       <table class="knobs">
         <tr><th>Knob</th><th>Default</th><th>Meaning</th></tr>
         <tr><td>energyBudget</td><td class="val">—</td><td>Starting reserve (required)</td></tr>
-        <tr><td>completionGoal</td><td class="val">20%</td><td>Share of the board the goal asks for</td></tr>
-        <tr><td>goal</td><td class="val">powered</td><td><code>powered</code> (running at once) or <code>revealed</code></td></tr>
+        <tr><td>goal.kind</td><td class="val">powered</td><td><code>powered</code> (running at once) or <code>revealed</code> (ever seen)</td></tr>
+        <tr><td>goal.value</td><td class="val">20%</td><td>Share the goal asks for. For <code>powered</code> that's a share of the board's total running cost, not of its tiles</td></tr>
         <tr><td>foodPerFarm</td><td class="val">1</td><td>Food capacity per running farm</td></tr>
         <tr><td>starvationPenalty</td><td class="val">1</td><td>Energy lost per person over capacity, per turn</td></tr>
         <tr><td>fogDistance</td><td class="val">−1</td><td>How far you can see from anything running (−1 = no fog)</td></tr>

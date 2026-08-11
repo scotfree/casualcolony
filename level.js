@@ -42,11 +42,6 @@ const LEVEL_NUMBERS = {
     // and no reserve at all.
     label: "a non-negative integer energyBudget",
   },
-  completionGoal: {
-    default: 0.2, min: 0, max: 1, exclusiveMin: true,
-    label: "completionGoal between 0 (exclusive) and 1 (inclusive)",
-    error: "Level's completionGoal must be between 0 (exclusive) and 1 (inclusive)",
-  },
   // The colony economy's knobs — see colony.js. Cost and generation are no
   // longer level-tunable: they're properties of what a tile *is* (see
   // buildings.js), and having them in two places was half the confusion.
@@ -109,13 +104,15 @@ function markCells(cells, size, pairs, field) {
   }
 }
 
-// What a level asks for. `powered` is a snapshot — how much is running right
-// now — and is the systems-shaped goal. `revealed` is monotonic, counting
-// anything ever seen. An old level's bare completionGoal reads as `powered`.
+// What a level asks for. `powered` is a snapshot — how much of the board's
+// power demand is running right now — and is the systems-shaped goal.
+// `revealed` is monotonic, counting anything ever seen.
 const GOAL_KINDS = new Set(["powered", "revealed"]);
 
-function parseGoal(goal, completionGoal) {
-  if (goal === undefined) return { kind: "powered", value: completionGoal };
+const DEFAULT_GOAL = { kind: "powered", value: 0.2 };
+
+function parseGoal(goal) {
+  if (goal === undefined) return { ...DEFAULT_GOAL };
   if (!goal || typeof goal !== "object") throw new Error("Level's goal must be an object");
   if (!GOAL_KINDS.has(goal.kind)) {
     throw new Error(`Level's goal.kind must be one of: ${[...GOAL_KINDS].join(", ")}`);
@@ -199,7 +196,7 @@ export function parseLevel(data) {
     // can know which building types this level's author actually chose.
     legend,
     ...parseNumbers(data),
-    goal: parseGoal(goal, parseNumbers(data).completionGoal),
+    goal: parseGoal(goal),
   };
 }
 

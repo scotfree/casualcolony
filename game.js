@@ -20,7 +20,9 @@ import {
 } from "./exchange.js";
 import { resolveColony, hasColony } from "./colony.js";
 import { solvePower } from "./power.js";
-import { resolveTap, applyTurn, settle, poweredFraction, revealedFraction } from "./rules.js";
+import {
+  resolveTap, applyTurn, settle, poweredFraction, revealedFraction, powerDemand,
+} from "./rules.js";
 import { showTitle, hideTitle, titleShowing } from "./title.js";
 import { describeTurn } from "./log.js";
 import { describeBudget } from "./budget.js";
@@ -34,7 +36,7 @@ import {
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.26.0";
+const VERSION = "0.27.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -517,10 +519,14 @@ function render(now) {
 
   for (const cell of world.cells) drawCell(cell, now);
 
+  // Measured in energy, not tiles, so the counter tracks the same thing the
+  // goal is judged on — a tile counts for what it costs to run.
+  const demand = powerDemand(world);
+
   drawHud(ctx, width, {
     name: world.level.name,
-    activated: world.cells.filter((cell) => cell.powered).length,
-    total: world.cells.length,
+    activated: demand.running,
+    total: demand.total,
     energy: world.energy,
     // Only shown for levels that actually use the colony economy — no reason
     // to clutter "0/0" onto a level with no colony tiles at all.

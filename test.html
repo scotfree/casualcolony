@@ -92,7 +92,7 @@ function buildLevel(rows, extra = {}) {
     },
     grid: rows,
     energyBudget: 99,
-    completionGoal: 1,
+    goal: { kind: "powered", value: 1 },
     ...extra,
   });
 }
@@ -619,7 +619,9 @@ test("poweredFraction counts the whole board; revealedFraction is monotonic", ()
   // can't carry it. A plant would survive this on its own storage.
   const world = build(["C..."], { energyBudget: 4, fogDistance: 1, startsVisible: [[0, 0]] });
   tap(world, cellAt(world, 0, 0));
-  assertEqual(poweredFraction(world), 0.25, "1 of 4 cells");
+  // The three deserts cost nothing to run, so they're not part of the target:
+  // the board's whole demand is this one crystal, and it's met.
+  assertEqual(poweredFraction(world), 1, "all of the board's demand is running");
   const seenBefore = revealedFraction(world);
   world.energy = 0;
   applyTurn(world, { kind: "enable", ok: true, cell: cellAt(world, 0, 0) });
@@ -679,35 +681,85 @@ test("rejects a missing energyBudget", () => {
     size: { width: 1, height: 1 },
     legend: { ".": "desert" },
     grid: ["."],
-    completionGoal: 0.5,
+    goal: { kind: "powered", value: 0.5 },
   }), "non-negative integer energyBudget");
 });
 
-test("rejects a completionGoal of zero", () => {
+test("rejects a goal value of zero", () => {
   assertThrows(() => parseLevel({
     size: { width: 1, height: 1 },
     legend: { ".": "desert" },
     grid: ["."],
     energyBudget: 1,
-    completionGoal: 0,
-  }), "completionGoal must be between 0");
+    goal: { kind: "powered", value: 0 },
+  }), "goal.value must be between 0");
 });
 
-test("rejects a completionGoal above 1", () => {
+test("rejects a goal value above 1", () => {
   assertThrows(() => parseLevel({
     size: { width: 1, height: 1 },
     legend: { ".": "desert" },
     grid: ["."],
     energyBudget: 1,
-    completionGoal: 1.5,
-  }), "completionGoal must be between 0");
+    goal: { kind: "powered", value: 1.5 },
+  }), "goal.value must be between 0");
 });
 
-test("parses valid energyBudget and completionGoal", () => {
-  const world = build(["C."], { energyBudget: 3, completionGoal: 0.5 });
+test("parses valid energyBudget and goal", () => {
+  const world = build(["C."], { energyBudget: 3, goal: { kind: "powered", value: 0.5 } });
   assertEqual(world.level.energyBudget, 3, "energyBudget");
-  assertEqual(world.level.completionGoal, 0.5, "completionGoal");
+  assertEqual(world.level.goal, { kind: "powered", value: 0.5 }, "goal");
   assertEqual(world.energy, 3, "energy starts at budget");
+});
+
+test("a level without a goal gets the default", () => {
+  // parseLevel directly, since the test helper always supplies a goal.
+  const level = parseLevel({
+    size: { width: 2, height: 1 },
+    legend: { ".": "desert", "C": "crystal" },
+    grid: ["C."],
+    energyBudget: 3,
+  });
+  assertEqual(level.goal, { kind: "powered", value: 0.2 }, "powered 20%");
+});
+
+// --- Completion, measured in energy rather than tiles -------------------------
+
+test("poweredFraction weighs tiles by what they cost to run", () => {
+  // A mine is 3 and a crystal is 1, so the board's demand is 4. Lighting the
+  // mine alone is three quarters of the job; lighting the crystal is a quarter.
+  const world = build(["MC"], { energyBudget: 9 });
+  assertEqual(poweredFraction(world), 0, "nothing running yet");
+
+  const mine = build(["M.C"], { energyBudget: 9 });
+  tap(mine, cellAt(mine, 0, 0));
+  assertEqual(poweredFraction(mine), 0.75, "the mine is 3 of the board's 4");
+
+  const crystal = build(["M.C"], { energyBudget: 9 });
+  tap(crystal, cellAt(crystal, 2, 0));
+  assertEqual(poweredFraction(crystal), 0.25, "the crystal is 1 of the board's 4");
+});
+
+test("inert tiles are not part of the target", () => {
+  // The bug this fixes: counting cells made desert something you had to power.
+  // recolonized asked for 20% of 80 cells — 16 tiles — on a board with only 12
+  // that can ever light, so it could not be won by arithmetic.
+  const dense = build(["CC"], { energyBudget: 9 });
+  const sparse = build(["C.........C"], { energyBudget: 9 });
+  for (const cell of dense.cells) if (cell.type === "crystal") tap(dense, cell);
+  for (const cell of sparse.cells) if (cell.type === "crystal") tap(sparse, cell);
+
+  assertEqual(poweredFraction(dense), 1, "every tile that can run, is");
+  assertEqual(
+    poweredFraction(sparse), 1,
+    "and the same is true however much desert surrounds it"
+  );
+});
+
+test("a board with nothing to power is not a division by zero", () => {
+  // Reachable through the editor, and NaN would poison every comparison the
+  // outcome check makes against it.
+  assertEqual(poweredFraction(build(["..."])), 0, "no demand, no progress");
 });
 
 test("colony knobs default sensibly when omitted", () => {
@@ -722,7 +774,7 @@ test("rejects a negative foodPerFarm", () => {
     legend: { ".": "desert" },
     grid: ["."],
     energyBudget: 1,
-    completionGoal: 0.5,
+    goal: { kind: "powered", value: 0.5 },
     foodPerFarm: -1,
   }), "foodPerFarm must be a non-negative number");
 });
@@ -733,7 +785,7 @@ test("rejects a negative starvationPenalty", () => {
     legend: { ".": "desert" },
     grid: ["."],
     energyBudget: 1,
-    completionGoal: 0.5,
+    goal: { kind: "powered", value: 0.5 },
     starvationPenalty: -1,
   }), "starvationPenalty must be a non-negative number");
 });
@@ -781,7 +833,7 @@ test("saveLevel then loadSavedLevels round-trips", () => {
     name: "__test_level__",
     size: { width: 1, height: 1 },
     energyBudget: 1,
-    completionGoal: 1,
+    goal: { kind: "powered", value: 1 },
     legend: { ".": "desert" },
     grid: ["."],
   });
@@ -795,7 +847,7 @@ test("saveLevel overwrites an existing entry with the same name", () => {
     name: "__test_level__",
     size: { width: 2, height: 1 },
     energyBudget: 2,
-    completionGoal: 1,
+    goal: { kind: "powered", value: 1 },
     legend: { ".": "desert" },
     grid: [".."],
   });
