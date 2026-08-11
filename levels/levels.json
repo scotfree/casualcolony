@@ -42,7 +42,7 @@
     ],
     "goal": {
       "kind": "powered",
-      "value": 0.1
+      "value": 0.2
     }
   },
   {
