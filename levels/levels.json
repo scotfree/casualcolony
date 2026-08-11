@@ -5,8 +5,8 @@
       "width": 8,
       "height": 10
     },
-    "energyBudget": 12,
-    "completionGoal": 0.2,
+    "energyBudget": 6,
+    "completionGoal": 0.3,
     "foodPerFarm": 1,
     "starvationPenalty": 1,
     "fogDistance": 2,
