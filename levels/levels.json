@@ -1,3 +1,4 @@
+
 [
   {
     "name": "recolonized",
@@ -18,11 +19,93 @@
       "M": "mine"
     },
     "grid": [
-      "..HHH...",
-      ".PFFFP..",
       "........",
       "........",
-      "..PMMM..",
+      "........",
+      ".HF..PM.",
+      "..C...M.",
+      "FCCPCPM.",
+      "..C.C...",
+      ".HF.C...",
+      "....P...",
+      "........"
+    ],
+    "startsVisible": [
+      [
+        5,
+        1
+      ],
+      [
+        4,
+        8
+      ]
+    ],
+    "goal": {
+      "kind": "powered",
+      "value": 0.6
+    }
+  },
+  {
+    "name": "Basic",
+    "size": {
+      "width": 8,
+      "height": 10
+    },
+    "energyBudget": 15,
+    "foodPerFarm": 1,
+    "starvationPenalty": 1,
+    "fogDistance": -1,
+    "legend": {
+      ".": "desert",
+      "C": "crystal",
+      "P": "powerPlant",
+      "H": "residential",
+      "F": "farm",
+      "M": "mine",
+      "R": "redCrystal",
+      "G": "greenCrystal"
+    },
+    "grid": [
+      "HHH..HFF",
+      "HHH.MCCC",
+      "HHH..HFC",
+      ".P.P...P",
+      ".M.MPC.F",
+      "RP.C.C.F",
+      "RR.C.C.F",
+      "RRCC.C.C",
+      "RGG..MPC",
+      "P..MMP.."
+    ],
+    "goal": {
+      "kind": "powered",
+      "value": 0.25
+    }
+  },
+  {
+    "name": "POD farmer",
+    "size": {
+      "width": 8,
+      "height": 10
+    },
+    "energyBudget": 6,
+    "foodPerFarm": 1,
+    "starvationPenalty": 1,
+    "fogDistance": 2,
+    "legend": {
+      ".": "desert",
+      "C": "crystal",
+      "P": "powerPlant",
+      "H": "residential",
+      "F": "farm",
+      "M": "mine"
+    },
+    "grid": [
+      "..H.H...",
+      ".PF.FP..",
+      "........",
+      "........",
+      "..PMMMP.",
       "........",
       "........",
       "........",
@@ -41,42 +124,8 @@
     ],
     "goal": {
       "kind": "powered",
-      "value": 0.2
+      "value": 0.6
     }
-  },
-  {
-    "name": "Basic",
-    "size": {
-      "width": 8,
-      "height": 10
-    },
-    "energyBudget": 15,
-    "foodPerFarm": 1,
-    "starvationPenalty": 1,
-    "goal": {
-      "kind": "powered",
-      "value": 0.25
-    },
-    "legend": {
-      ".": "desert",
-      "C": "crystal",
-      "P": "powerPlant",
-      "H": "residential",
-      "F": "farm",
-      "M": "mine",
-      "R": "redCrystal"
-    },
-    "grid": [
-      "HHH..HFF",
-      "HHH.MCCC",
-      "HHH..HFC",
-      ".P.P...P",
-      ".M.MPC.F",
-      ".C.C.C.F",
-      "CC.C.C.F",
-      "C.CC.C.C",
-      "C.P..MPC",
-      "P..MMP.."
-    ]
   }
 ]
+
