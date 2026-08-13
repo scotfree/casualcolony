@@ -9,7 +9,7 @@
 //
 // Bump VERSION on each deploy so you can tell a fresh deploy from a cached one.
 
-import { loadLevelSet, parseLevel, createRun, serializeLevel } from "./level.js";
+import { loadLevelSet, parseLevel, createRun, serializeLevel, GOAL_KINDS } from "./level.js";
 import {
   loadSavedLevels, saveLevel, saveLevels, loadIconOverrides, saveIconOverride,
   saveIconOverrides, clearLocalEdits, hasLocalEdits,
@@ -22,6 +22,7 @@ import { resolveColony, hasColony } from "./colony.js";
 import { solvePower } from "./power.js";
 import {
   resolveTap, applyTurn, settle, poweredFraction, revealedFraction, powerDemand,
+  sightProgress,
 } from "./rules.js";
 import { showTitle, hideTitle, titleShowing } from "./title.js";
 import { describeTurn } from "./log.js";
@@ -32,11 +33,11 @@ import { buildingFor, BUILDINGS } from "./buildings.js";
 import { paintTile } from "./tiles.js";
 import * as modals from "./modals.js";
 import {
-  HUD_HEIGHT, BOARD_MARGIN, hudLayout, outcomeLayout, hitsButton,
+  HUD_HEIGHT, BOARD_MARGIN, hudLayout, statsLayout, outcomeLayout, hitsButton,
   drawHud, drawOutcome, drawError,
 } from "./hud.js";
 
-const VERSION = "0.27.0";
+const VERSION = "0.28.0";
 const LEVEL_SET_URL = "./levels/levels.json";
 
 // How long a single cell takes to pop in once its litAt arrives. (The gap
@@ -88,6 +89,36 @@ let pickerCell = null;
 // the first one. Only the last turn is kept — the log answers "what did that
 // just do", not "what have I done so far".
 let lastTurn = null;
+
+// What the HUD is showing right now. Built in one place because the stats
+// segments are hit-tested against their own measured widths — if input and
+// drawing each assembled their own view, a click could land on a number that
+// isn't there any more.
+function hudView() {
+  const { kind, value } = world.level.goal;
+  // Whichever quantity this level is actually judged on. A `powered` board is
+  // measured in energy rather than tiles, so the counter tracks the same thing
+  // the goal does: a tile counts for what it costs to run.
+  const progress = kind === "revealed"
+    ? (({ seen, total }) => ({ done: seen, total }))(sightProgress(world))
+    : (({ running, total }) => ({ done: running, total }))(powerDemand(world));
+  return {
+    name: world.level.name,
+    activated: progress.done,
+    total: progress.total,
+    goalKind: kind,
+    // Only worth the width while editing, where it's the number you just set
+    // and otherwise nothing on screen would acknowledge the change.
+    goalTarget: editMode ? Math.round(value * 100) : null,
+    energy: world.energy,
+    // Only shown for levels that actually use the colony economy — no reason
+    // to clutter "0/0" onto a level with no colony tiles at all.
+    colony: hasColony(world)
+      ? resolveColony(world, new Set(world.cells.filter((c) => c.powered)))
+      : null,
+    editMode,
+  };
+}
 
 // --- Layout -----------------------------------------------------------------
 // The canvas fills its safe-area-inset stage; the board is square-celled and
@@ -283,6 +314,35 @@ function showDataMenu() {
   });
 }
 
+// The level's own settings, reached by tapping the readout that shows them.
+// Both write straight to world.level, the same way the tile picker writes
+// straight to a cell — edit mode edits the loaded level in place, and "save
+// as" is what makes it permanent.
+function showGoalEditor() {
+  modals.openGoalEditor({
+    goal: world.level.goal,
+    kinds: GOAL_KINDS,
+    onSave: (goal) => {
+      world.level.goal = goal;
+      modals.closeModal();
+    },
+  });
+}
+
+function showEnergyEditor() {
+  modals.openEnergyEditor({
+    energy: world.level.energyBudget,
+    onSave: (energyBudget) => {
+      world.level.energyBudget = energyBudget;
+      // The editor shows a live run, so the reserve on screen has to move too
+      // — otherwise you'd set a budget and watch the old number sit there
+      // until you reloaded the level.
+      world.energy = energyBudget;
+      modals.closeModal();
+    },
+  });
+}
+
 function showTilePicker(cell) {
   pickerCell = cell;
   modals.openTilePicker({
@@ -349,6 +409,26 @@ canvas.addEventListener("pointerdown", (event) => {
   const rect = canvas.getBoundingClientRect();
   const hudX = event.clientX - rect.left;
   const hudY = event.clientY - rect.top;
+
+  // The level's parameters, tapped where they're displayed. Only while
+  // editing: during a run these are a readout, and there'd be nothing honest
+  // for a tap to do to them.
+  //
+  // Checked before the buttons because a button's rect covers the full HUD
+  // height — a generous target while playing, when nothing else is down there
+  // to hit. In edit mode the lower band belongs to the stats instead, and the
+  // buttons keep the row they're actually drawn on.
+  if (editMode) {
+    const stats = statsLayout(ctx, width, hudView());
+    if (hitsButton(stats.goal, hudX, hudY)) {
+      showGoalEditor();
+      return;
+    }
+    if (hitsButton(stats.energy, hudX, hudY)) {
+      showEnergyEditor();
+      return;
+    }
+  }
 
   if (hitsButton(buttons.legend, hudX, hudY)) {
     modals.openLegend({ iconOverrides });
@@ -519,20 +599,8 @@ function render(now) {
 
   for (const cell of world.cells) drawCell(cell, now);
 
-  // Measured in energy, not tiles, so the counter tracks the same thing the
-  // goal is judged on — a tile counts for what it costs to run.
-  const demand = powerDemand(world);
-
-  drawHud(ctx, width, {
-    name: world.level.name,
-    activated: demand.running,
-    total: demand.total,
-    energy: world.energy,
-    // Only shown for levels that actually use the colony economy — no reason
-    // to clutter "0/0" onto a level with no colony tiles at all.
-    colony: hasColony(world) ? resolveColony(world, new Set(world.cells.filter((c) => c.powered))) : null,
-    editMode,
-  }, buttons);
+  const view = hudView();
+  drawHud(ctx, width, view, buttons, statsLayout(ctx, width, view));
 
   // Not while editing — the outcome screen would otherwise block the board
   // you're trying to click, and edit mode always ends in a reset anyway.

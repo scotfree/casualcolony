@@ -107,15 +107,17 @@ function markCells(cells, size, pairs, field) {
 // What a level asks for. `powered` is a snapshot — how much of the board's
 // power demand is running right now — and is the systems-shaped goal.
 // `revealed` is monotonic, counting anything ever seen.
-const GOAL_KINDS = new Set(["powered", "revealed"]);
+// Exported so the level editor offers exactly the kinds the parser accepts —
+// a picker listing a kind parseGoal rejects would build unloadable levels.
+export const GOAL_KINDS = ["powered", "revealed"];
 
 const DEFAULT_GOAL = { kind: "powered", value: 0.2 };
 
 function parseGoal(goal) {
   if (goal === undefined) return { ...DEFAULT_GOAL };
   if (!goal || typeof goal !== "object") throw new Error("Level's goal must be an object");
-  if (!GOAL_KINDS.has(goal.kind)) {
-    throw new Error(`Level's goal.kind must be one of: ${[...GOAL_KINDS].join(", ")}`);
+  if (!GOAL_KINDS.includes(goal.kind)) {
+    throw new Error(`Level's goal.kind must be one of: ${GOAL_KINDS.join(", ")}`);
   }
   if (typeof goal.value !== "number" || goal.value <= 0 || goal.value > 1) {
     throw new Error("Level's goal.value must be between 0 (exclusive) and 1 (inclusive)");

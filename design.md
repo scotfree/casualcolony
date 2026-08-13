@@ -1434,6 +1434,41 @@ exactly what it needed before, and reaches 87%. The existing values still mean
 something reasonable, but they mean something *different*, so they're worth a
 pass.
 
+## Milestone 22 — The readouts become the level's settings
+
+Two of a level's parameters — what it asks for, and what you start with — could
+only be changed by hand-editing JSON, while the editor happily let you rearrange
+every tile. That's the wrong split: a goal percentage is only meaningful next to
+a board you can see, and "20%" means something different the moment you add a
+power plant.
+
+**The number you want to change is the number you're looking at.** Tapping the
+completion counter in edit mode opens the goal (kind and percentage); tapping
+the ⚡ counter sets the starting reserve. No settings screen — that would put
+the value in one place and its consequences in another.
+
+**So the stats row had to stop being one centred string.** `statsLayout` now
+lays it out as measured segments with their own hitboxes, pure and callable at
+click time, the same shape as `hudLayout`. Computing it on the click rather
+than caching it means there's no layout that can go stale between frames — and
+the segments move constantly, because their labels are the numbers.
+
+**The buttons keep their oversized targets while playing.** A HUD button's rect
+covers the full height, which is generous and harmless when nothing else is in
+the lower band. In edit mode the stats are checked first, so the lower band goes
+to them and the buttons keep the row they're drawn on.
+
+**The counter follows the goal it's judged on.** Setting a level to `revealed`
+and leaving the readout saying "powered" would be the editor lying about the
+thing it just changed, so the left segment reports cells-seen for `revealed`
+and energy-running for `powered` — hence `sightProgress` alongside
+`powerDemand`. The target percentage shows only while editing: it's the number
+you just set, and during a run it's clutter.
+
+**`GOAL_KINDS` is exported rather than duplicated.** A picker offering a kind
+`parseGoal` rejects would build levels that fail to load, which is exactly the
+class of bug an editor should be incapable of.
+
 ## Decisions so far
 
 | Decision | Why |
@@ -1476,6 +1511,9 @@ pass.
 | Shipped icons are a static ES module, not fetched JSON | An icon must exist before the first frame or the tile flashes its default shape; a static import resolves in time, a fetch doesn't |
 | Import auto-detects levels vs icons instead of offering a mode | An array and an object are distinguishable on sight, so there's no setting to get wrong |
 | Clearing local edits is offered separately, and only when there are any | Until local copies are cleared they shadow the shipped files, so edits compound on a shadow and shipped changes are silently ignored |
+| A level parameter is edited by tapping the readout that shows it | A goal percentage only means something next to the board it judges; a settings screen puts the value and its consequences on different screens |
+| The completion counter reports whichever quantity the goal names | Otherwise setting a level to `revealed` leaves the HUD describing power, which is the editor misreporting the change you just made |
+| The goal picker's options come from the parser's own list | A picker offering a kind the parser rejects builds levels that fail to load — the one class of bug an editor should be incapable of |
 | The budget view is derived from board state, not from a turn record | It has to be correct before the first tap, and "what is true now" isn't a question a record of the last turn can answer |
 | Every budget row names who pays for it, and each total lists its parts | Under two budgets a bare cost column implies one pot; a total without its parts leaves "−1 from what?" unanswered, which is the exact confusion the rule creates |
 | Level choice and the editor live on a title screen, not in the HUD | They throw the run away, so they shouldn't sit one tap from the board; it also stops the editor being reachable only through a run you have to ignore |

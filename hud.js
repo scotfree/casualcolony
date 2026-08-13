@@ -74,13 +74,61 @@ export function hudLayout(ctx, width, editMode, name = "") {
   return rects;
 }
 
+// The stats row, laid out as separate segments rather than one centred string.
+//
+// It's one string to read but three different facts, and two of them are level
+// parameters the editor can change — so they need their own hitboxes. Same
+// split as hudLayout: pure, called with the current numbers, changing nothing.
+// The caller can therefore compute it at click time and never worry about a
+// layout that went stale between frames.
+const STATS_GAP = 22;
+
+// Which segments are level parameters, and so tappable in edit mode. The
+// colony readout is derived from what's on the board, not a knob, so it isn't
+// here.
+export const EDITABLE_STATS = new Set(["goal", "energy"]);
+
+export function statsLayout(ctx, width, view) {
+  ctx.font = LABEL_FONT;
+  const target = view.goalTarget === null || view.goalTarget === undefined
+    ? "" : ` · ${view.goalTarget}%`;
+  const segments = [
+    ["goal", `${view.activated} / ${view.total} ${view.goalKind ?? "powered"}${target}`],
+    ["energy", `⚡ ${view.energy}`],
+  ];
+  if (view.colony) {
+    segments.push(["colony", `👥 ${view.colony.population}/${view.colony.foodCapacity}`]);
+  }
+
+  const widths = segments.map(([, text]) => ctx.measureText(text).width);
+  const total = widths.reduce((a, b) => a + b, 0) + STATS_GAP * (segments.length - 1);
+
+  let x = Math.round((width - total) / 2);
+  const rects = {};
+  segments.forEach(([key, label], i) => {
+    rects[key] = {
+      label,
+      textAt: x,
+      // The box is the whole lower band of the HUD, not the text's own line
+      // height — a 13px target is not something you can hit with a thumb.
+      x: x - STATS_GAP / 2,
+      y: Math.round(HUD_HEIGHT * 0.52),
+      w: widths[i] + STATS_GAP,
+      h: Math.round(HUD_HEIGHT * 0.48),
+      width: widths[i],
+    };
+    x += widths[i] + STATS_GAP;
+  });
+  return rects;
+}
+
 export function hitsButton(button, x, y) {
   if (!button) return false;
   return x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h;
 }
 
 // view: { name, activated, total, energy, colony, editMode }
-export function drawHud(ctx, width, view, layout) {
+export function drawHud(ctx, width, view, layout, stats) {
   // Two rows: name + buttons on top, activation/energy stats below. A single
   // row overlapped the name with the stats on narrow phones.
   const row1 = HUD_HEIGHT * 0.36;
@@ -92,13 +140,27 @@ export function drawHud(ctx, width, view, layout) {
   ctx.textAlign = "left";
   ctx.fillText(view.name, 14, row1);
 
-  let statsText = `${view.activated} / ${view.total} powered   ⚡ ${view.energy}`;
-  if (view.colony) statsText += `   👥 ${view.colony.population}/${view.colony.foodCapacity}`;
   // The whole line goes warning-red when the colony is starving — simpler and
-  // just as legible as splitting it into separately-colored segments.
-  ctx.fillStyle = view.colony && !view.colony.fed ? BAD : GOOD;
-  ctx.textAlign = "center";
-  ctx.fillText(statsText, width / 2, row2);
+  // just as legible as colouring the segments separately.
+  const statsColor = view.colony && !view.colony.fed ? BAD : GOOD;
+  ctx.textAlign = "left";
+  for (const [key, segment] of Object.entries(stats)) {
+    const editable = view.editMode && EDITABLE_STATS.has(key);
+    ctx.fillStyle = statsColor;
+    ctx.fillText(segment.label, segment.textAt, row2);
+    // Underlined while editing, because these stop being a readout and become
+    // the level's own settings — the same "this does something" cue the
+    // buttons above already carry by being labelled with verbs.
+    if (!editable) continue;
+    ctx.strokeStyle = statsColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(segment.textAt, row2 + 10.5);
+    ctx.lineTo(segment.textAt + segment.width, row2 + 10.5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   for (const [key, color] of [
     ["legend", BUTTON],

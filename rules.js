@@ -204,5 +204,16 @@ export function poweredFraction(world) {
 // tiles aren't a target" argument applies to powering things, not to seeing
 // them.
 export function revealedFraction(world) {
-  return world.cells.filter((cell) => cell.seen).length / world.cells.length;
+  const { seen, total } = sightProgress(world);
+  return total === 0 ? 0 : seen / total;
+}
+
+// The same pair powerDemand gives, for the other kind of goal, so the HUD can
+// show whichever one this level is actually judged on rather than always
+// reporting power at a board being scored on sight.
+export function sightProgress(world) {
+  return {
+    seen: world.cells.filter((cell) => cell.seen).length,
+    total: world.cells.length,
+  };
 }

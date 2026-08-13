@@ -493,6 +493,129 @@ export function openDataMenu({ hasLocal, onExportLevels, onExportIcons, onImport
   });
 }
 
+// --- Level parameters -------------------------------------------------------
+//
+// Reached by tapping the readouts in the HUD while editing, rather than from a
+// settings screen: the number you want to change is the number you're looking
+// at, and a level's goal is only meaningful next to what the board can
+// actually reach.
+
+const GOAL_BLURB = {
+  powered: "A snapshot: how much of the board's power demand is running at once. You have to hold it.",
+  revealed: "How much of the board has ever been seen. Monotonic — it can't be lost again.",
+};
+
+// A whole-number percentage input with its own save button. Both parameter
+// editors are this shape, so it's one function with different bounds and
+// different wording rather than two near-identical ones.
+function numberField(parent, { value, min, max, suffix, onCommit }) {
+  const row = document.createElement("div");
+  row.className = "modal-row";
+
+  const input = document.createElement("input");
+  input.className = "modal-input";
+  input.type = "number";
+  input.min = String(min);
+  if (max !== undefined) input.max = String(max);
+  input.step = "1";
+  input.value = String(value);
+  row.appendChild(input);
+
+  const save = document.createElement("button");
+  save.className = "modal-save";
+  save.textContent = "save";
+  row.appendChild(save);
+  parent.appendChild(row);
+
+  // Whole numbers inside the bounds only — the parser rejects anything else
+  // (level.js), and an editor that can build an unloadable level is worse than
+  // one that won't let you type the mistake.
+  const read = () => {
+    const raw = Number.parseInt(input.value, 10);
+    if (!Number.isFinite(raw)) return null;
+    if (raw < min) return null;
+    if (max !== undefined && raw > max) return null;
+    return raw;
+  };
+  const refresh = () => { save.disabled = read() === null; };
+  input.addEventListener("input", refresh);
+  refresh();
+
+  const commit = () => {
+    const parsed = read();
+    if (parsed !== null) onCommit(parsed);
+  };
+  save.addEventListener("click", commit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") commit();
+  });
+
+  if (suffix) {
+    const note = document.createElement("div");
+    note.className = "modal-note";
+    note.textContent = suffix;
+    parent.appendChild(note);
+  }
+
+  requestAnimationFrame(() => { input.focus(); input.select(); });
+  return input;
+}
+
+// goal: { kind, value } as the level carries it. onSave gets the same shape.
+export function openGoalEditor({ goal, kinds, onSave }) {
+  open((parent) => {
+    addTitle(parent, "what this level asks for");
+
+    // Kind first: it changes what the percentage is a percentage *of*, so
+    // picking it after typing a number would silently re-mean the number.
+    let kind = goal.kind;
+    const blurb = document.createElement("div");
+    const buttons = new Map();
+    for (const option of kinds) {
+      const button = document.createElement("button");
+      button.className = "option";
+      button.textContent = option;
+      button.addEventListener("click", () => {
+        kind = option;
+        for (const [key, element] of buttons) {
+          element.classList.toggle("selected", key === kind);
+        }
+        blurb.textContent = GOAL_BLURB[kind] ?? "";
+      });
+      buttons.set(option, button);
+      parent.appendChild(button);
+    }
+    buttons.get(kind)?.classList.add("selected");
+
+    blurb.className = "modal-note";
+    blurb.textContent = GOAL_BLURB[kind] ?? "";
+    parent.appendChild(blurb);
+
+    // Stored as a fraction, edited as a percentage: 0.2 is what the file says
+    // and "20" is what a person means.
+    numberField(parent, {
+      value: Math.round(goal.value * 100),
+      min: 1,
+      max: 100,
+      suffix: "Percent of the board needed to win.",
+      onCommit: (percent) => onSave({ kind, value: percent / 100 }),
+    });
+  });
+}
+
+export function openEnergyEditor({ energy, onSave }) {
+  open((parent) => {
+    addTitle(parent, "starting reserve");
+    numberField(parent, {
+      value: energy,
+      min: 0,
+      suffix: "What the player begins with. 0 is legitimate — a level can hand "
+        + "you a grid that pays for itself and nothing to spend.",
+      onCommit: onSave,
+    });
+  });
+}
+
 export function openSavePrompt({ currentName, onSave }) {
   open((parent) => {
     addTitle(parent, "save as new level");

@@ -25,7 +25,10 @@ import { solvePower, components } from "./power.js";
 import { resolveColony, hasColony, poolIncome, starvationCost } from "./colony.js";
 import {
   resolveTap, applyTurn, tap, settle, poweredFraction, revealedFraction,
+  powerDemand, sightProgress,
 } from "./rules.js";
+import { statsLayout, EDITABLE_STATS } from "./hud.js";
+import { GOAL_KINDS } from "./level.js";
 import { describeTurn } from "./log.js";
 import { describeBudget } from "./budget.js";
 import { visibleCells } from "./visibility.js";
@@ -612,6 +615,70 @@ test("the pulse ripples outward from the generator, not from your finger", () =>
   assertEqual(cellAt(world, 2, 0).litAt, 1000, "the plant lights first");
   assert(cellAt(world, 1, 0).litAt > 1000, "its neighbour a moment later");
   assert(cellAt(world, 0, 0).litAt > cellAt(world, 1, 0).litAt, "and the far end later still");
+});
+
+// --- HUD stats (hud.js) ------------------------------------------------------
+//
+// The readouts are tap targets in the editor, so where they sit is a rule and
+// not just a drawing detail.
+
+// Enough of a canvas context for statsLayout, which only ever measures text.
+const fakeCtx = { font: "", measureText: (text) => ({ width: text.length * 7 }) };
+
+test("the stats row lays out as separate, non-overlapping segments", () => {
+  const view = {
+    activated: 4, total: 24, goalKind: "powered", goalTarget: null,
+    energy: 6, colony: { population: 1, foodCapacity: 2, fed: true }, editMode: false,
+  };
+  const stats = statsLayout(fakeCtx, 460, view);
+
+  assertEqual(Object.keys(stats), ["goal", "energy", "colony"], "three segments");
+  assert(stats.goal.label.includes("powered"), "the left one names the goal kind");
+  assert(stats.energy.label.includes("6"), "the middle one is the reserve");
+  // Adjacent, in order, and never on top of each other — otherwise a tap on
+  // one opens the other's editor.
+  assert(stats.goal.x + stats.goal.w <= stats.energy.x + 1, "goal sits left of energy");
+  assert(stats.energy.x + stats.energy.w <= stats.colony.x + 1, "energy sits left of colony");
+});
+
+test("the stats row follows the goal kind, and only the editor sees the target", () => {
+  const base = { activated: 25, total: 80, energy: 6, colony: null };
+  const revealed = statsLayout(fakeCtx, 460, {
+    ...base, goalKind: "revealed", goalTarget: 35, editMode: true,
+  });
+  assert(revealed.goal.label.includes("revealed"), "says what it's actually judged on");
+  assert(revealed.goal.label.includes("35%"), "and what it's aiming for, while editing");
+
+  const playing = statsLayout(fakeCtx, 460, {
+    ...base, goalKind: "revealed", goalTarget: null, editMode: false,
+  });
+  assert(!playing.goal.label.includes("%"), "the target is editor-only clutter");
+  assertEqual(Object.keys(playing), ["goal", "energy"], "no colony segment without a colony");
+});
+
+test("only the level's own parameters are editable readouts", () => {
+  // The colony line is counted off the board, so there's nothing for a tap to
+  // set — offering one would promise an edit that can't happen.
+  assertEqual([...EDITABLE_STATS].sort(), ["energy", "goal"], "goal and reserve, not colony");
+});
+
+test("the goal editor is offered exactly the kinds the parser accepts", () => {
+  assert(GOAL_KINDS.length > 0, "there is at least one");
+  for (const kind of GOAL_KINDS) {
+    const world = build(["PC"], { energyBudget: 5, goal: { kind, value: 0.5 } });
+    assertEqual(world.level.goal.kind, kind, `${kind} parses`);
+  }
+});
+
+test("sightProgress counts cells, powerDemand counts energy", () => {
+  // The two goals measure different things on purpose: powering is judged on
+  // what it costs to run, touring on how much map you've seen.
+  const world = build(["PC.."], { energyBudget: 5 });
+  tap(world, cellAt(world, 0, 0));
+
+  assertEqual(powerDemand(world), { running: 2, total: 2 }, "plant 1 + crystal 1, both running");
+  assertEqual(sightProgress(world).total, 4, "sight counts every cell, desert included");
+  assertEqual(sightProgress(world).seen, 2, "the two that lit");
 });
 
 test("poweredFraction counts the whole board; revealedFraction is monotonic", () => {
